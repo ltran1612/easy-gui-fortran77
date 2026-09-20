@@ -76,6 +76,7 @@ pub fn run(args: &[String]) -> Result<()> {
     fs::copy(&app, out.join(exe_name))?;
     copy_tree(&bundle, &out.join("toolchain"))?;
     licences(&root, &out, &target, &version)?;
+    examples(&root, &out)?;
     readme(&out, windows)?;
 
     let bytes = dir_size(&out)?;
@@ -137,6 +138,21 @@ pub fn workspace_version(root: &Path) -> Result<String> {
         }
     }
     bail!("could not read the workspace version from Cargo.toml")
+}
+
+/// Ship the example programs with the application.
+///
+/// They exist so that someone opening this for the first time has something to
+/// press the button on, and that only works if they arrive with it. In the
+/// repository alone they serve whoever reads the repository, which is not the
+/// person this is for.
+fn examples(root: &Path, out: &Path) -> Result<()> {
+    let from = root.join("examples");
+    if !from.is_dir() {
+        bail!("no examples/ directory at {}", from.display());
+    }
+    copy_tree(&from, &out.join("examples"))?;
+    Ok(())
 }
 
 // ------------------------------------------------------------------ licences

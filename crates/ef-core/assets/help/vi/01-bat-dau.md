@@ -13,6 +13,14 @@ dùng đến cửa sổ dòng lệnh.
 Nếu có lỗi, các thông báo sẽ hiện ở khung phía dưới, kèm giải thích bằng tiếng
 Việt. Xem mục *Lưu và chạy chương trình* để biết cách chạy chương trình đã lưu.
 
+## Chưa có chương trình nào để thử?
+
+Ứng dụng có sẵn vài ví dụ, nằm trong thư mục **examples** ngay cạnh nơi cài đặt.
+Hãy mở tệp **DOC-TRUOC.txt** trong đó để biết từng ví dụ dạy gì — từ biến và
+vòng lặp cho tới chương trình con và đọc ghi tệp.
+
+Bấm **Thêm tệp…** rồi chọn `examples\01-CO-BAN.FOR` là thử được ngay.
+
 ## Ứng dụng không bao giờ sửa tệp của bạn
 
 Các tệp mã nguồn chỉ được **đọc**. Ứng dụng sao chép chúng sang một thư mục

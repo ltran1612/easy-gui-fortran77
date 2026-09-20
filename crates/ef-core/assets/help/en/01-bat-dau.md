@@ -13,6 +13,14 @@ command-line window.
 If anything is wrong, the messages appear in the panel below with a plain-language
 explanation. See *Saving and running* for how to run the program you saved.
 
+## Nothing to try it on yet?
+
+A few examples come with the application, in the **examples** folder beside
+where it was installed. Open **DOC-TRUOC.txt** in there to see what each one
+covers — variables and loops through to subroutines and file input and output.
+
+Click **Add files…** and pick `examples\01-CO-BAN.FOR` to try one.
+
 ## The application never changes your files
 
 Your source files are only ever **read**. The application copies them into its own

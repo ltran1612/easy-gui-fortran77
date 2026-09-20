@@ -44,6 +44,9 @@ made of:
 | `04-DOC-GHI-TEP.FOR` | `OPEN`/`WRITE`/`READ`/`CLOSE` — how a program of this vintage takes data in and puts results out |
 | `05-LOI-COT72.FOR` | broken on purpose: a line past column 72, the trap card-image code falls into. The "132 columns" option is the fix. |
 
+They ship inside the installer and the archive, beside the application, so
+someone who installs rather than clones has them too.
+
 `cargo test -p ef-testkit --test examples` asserts every documented outcome —
 that each one builds, that the broken one still fails at 72 and still stops
 failing at 132, that the guide names every file present, and that each program

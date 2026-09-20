@@ -54,6 +54,12 @@ wine reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\EasyFor
   | grep -E 'DisplayName|DisplayVersion' | sed 's/^\s*/  /'
 
 echo
+echo "== the examples came with it =="
+for f in examples/DOC-TRUOC.txt examples/01-CO-BAN.FOR examples/03-CHUONG-TRINH-CON/THAMSO.INC; do
+  [ -f "$installed/$f" ] && echo "  $f" || { echo "FAIL: $f was not installed"; exit 1; }
+done
+
+echo
 echo "== the installed compiler still works =="
 t="$(mktemp -d)"; printf '      PROGRAM T\n      WRITE (*,*) 6*7\n      END\n' > "$t/t.f"
 tr=x86_64-w64-mingw32; v=16.2.0
