@@ -906,7 +906,7 @@ dependencies = [
 
 [[package]]
 name = "ef-cli"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -915,7 +915,7 @@ dependencies = [
 
 [[package]]
 name = "ef-core"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "crossbeam-channel",
  "directories",
@@ -938,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "ef-gui"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "crossbeam-channel",
  "ef-core",
@@ -956,7 +956,7 @@ dependencies = [
 
 [[package]]
 name = "ef-testkit"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "crossbeam-channel",
  "dunce",
@@ -4911,7 +4911,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "flate2",
