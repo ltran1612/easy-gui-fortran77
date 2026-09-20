@@ -491,8 +491,12 @@ mod tests {
             .1
             .to_string_lossy()
             .to_string();
-        assert!(path.contains("/opt/ef77/toolchain/bin"));
-        assert!(path.contains("/opt/ef77/toolchain/libexec"));
+        // Built from `root` for the same reason the flags above are: the
+        // separator and the drive prefix differ by platform.
+        for dir in ["bin", "libexec"] {
+            let want = root.join(dir).display().to_string();
+            assert!(path.contains(&want), "PATH {path:?} is missing {want:?}");
+        }
     }
 
     #[test]

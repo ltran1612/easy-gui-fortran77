@@ -78,7 +78,11 @@ jobs:
         # that printed the line and then failed would pass this step.
         shell: bash
         run: |
-          cargo run -p ef-cli -- doctor | tee /dev/stderr | grep -q 'integrity  : ok'
+          # Captured rather than `| tee /dev/stderr |`: Git Bash on Windows has
+          # no /dev/stderr, and under pipefail tee's failure fails the step.
+          out=$(cargo run -p ef-cli -- doctor)
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -q 'integrity  : ok'
         env:
           EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/linux-x86_64
 
@@ -102,7 +106,11 @@ jobs:
       - name: The integrity manifest must match what was just built
         shell: bash
         run: |
-          cargo run -p ef-cli -- doctor | tee /dev/stderr | grep -q 'integrity  : ok'
+          # Captured rather than `| tee /dev/stderr |`: Git Bash on Windows has
+          # no /dev/stderr, and under pipefail tee's failure fails the step.
+          out=$(cargo run -p ef-cli -- doctor)
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -q 'integrity  : ok'
         env:
           EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/windows-x86_64
 

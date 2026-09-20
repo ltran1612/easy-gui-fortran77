@@ -136,7 +136,11 @@ jobs:
           # non-recursive RMDir fail and leave the install directory behind.
           exe=ef-cli; [ -f "target/release/ef-cli.exe" ] && exe=ef-cli.exe
           cp "target/release/$exe" "$dist/$exe"
-          ( cd "$dist" && "./$exe" doctor | tee /dev/stderr | grep -q "integrity  : ok" )
+          # Captured rather than `| tee /dev/stderr |`: Git Bash on Windows has
+          # no /dev/stderr, and under pipefail tee's failure fails the step.
+          out=$( cd "$dist" && "./$exe" doctor )
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -q "integrity  : ok"
           rm -f "$dist/$exe"
 
       - name: Build the Windows installer
