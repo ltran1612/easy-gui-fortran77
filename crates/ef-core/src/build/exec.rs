@@ -59,43 +59,53 @@ fn stop(child: &mut Child) -> bool {
     let pid = child.id();
 
     #[cfg(unix)]
-    let mut killer = {
-        let mut c = Command::new("kill");
-        // `-s KILL` and `--` rather than `-KILL -<pgid>`: a bare negative pid
-        // is a leading dash, and implementations differ about whether that is a
-        // process group or a second signal name. Verified that this form kills
-        // the whole group.
-        c.args(["-s", "KILL", "--", &format!("-{pid}")]);
-        c
+    let signalled = {
+        // Straight from `rustix`, not a `kill` subprocess. The earlier version
+        // shelled out on the grounds that signalling a group needs `unsafe` — it
+        // does not, here: `unsafe_code = "forbid"` is a lint on the code in this
+        // workspace, and rustix's `killpg` is a safe function. Shelling out was
+        // also unreliable, which is how the mistake surfaced. `kill` is a shell
+        // builtin as often as a binary, `Command::new` does not consult a shell,
+        // and the implementations disagree about a bare negative pid, so it
+        // worked on Fedora and did nothing at all on Ubuntu's CI runner.
+        match rustix::process::Pid::from_raw(pid as i32) {
+            Some(leader) => {
+                let r = rustix::process::kill_process_group(leader, rustix::process::Signal::KILL);
+                if let Err(e) = r {
+                    tracing::debug!("could not signal the compiler's process group: {e}");
+                }
+                r.is_ok()
+            }
+            None => false,
+        }
     };
+
     #[cfg(windows)]
-    let mut killer = {
+    let signalled = {
+        // No Job object, because the `windows` crate's functions are `unsafe fn`
+        // and calling them would need `unsafe` here. `taskkill /T` walks the
+        // tree instead; it is a real binary on every Windows, and this is a
+        // plain child process, never a shell.
         let mut c = Command::new("taskkill");
         c.args(["/T", "/F", "/PID", &pid.to_string()]);
-        c
-    };
-
-    killer
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    harden(&mut killer);
-    let signalled = match killer.status() {
-        Ok(s) if s.success() => true,
-        // Worth a line in the log rather than silence: it is the difference
-        // between the compiler's children dying now and running to completion
-        // unnoticed, and it varies by distribution in ways that are not obvious.
-        Ok(s) => {
-            tracing::debug!("could not signal the compiler's process group: {s}");
-            false
-        }
-        Err(e) => {
-            tracing::debug!("no way to signal the compiler's process group: {e}");
-            false
+        c.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        harden(&mut c);
+        match c.status() {
+            Ok(s) if s.success() => true,
+            Ok(s) => {
+                tracing::debug!("taskkill could not stop the compiler's tree: {s}");
+                false
+            }
+            Err(e) => {
+                tracing::debug!("could not run taskkill: {e}");
+                false
+            }
         }
     };
 
-    // Belt and braces: if that could not run at all, at least the driver dies.
+    // Belt and braces: whatever happened above, the driver itself dies.
     let _ = child.kill();
     signalled
 }

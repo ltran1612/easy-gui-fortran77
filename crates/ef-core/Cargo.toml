@@ -28,6 +28,14 @@ tracing.workspace = true
 time.workspace = true
 tempfile.workspace = true
 
+# Signalling a process group, for the Stop button. Already in the tree by way of
+# `tempfile` and `which`, so this costs no new dependency — and its `killpg` is
+# a safe function, so `unsafe_code = "forbid"` stays exactly as it is. That lint
+# is a rule about the code in this workspace, not about what a dependency does
+# internally; every crate here including `std` has unsafe inside it.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
 
 [features]
 default = []

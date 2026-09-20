@@ -922,6 +922,7 @@ dependencies = [
  "dunce",
  "encoding_rs",
  "os_pipe",
+ "rustix 1.1.5",
  "serde",
  "sha2 0.10.9",
  "tempfile",
