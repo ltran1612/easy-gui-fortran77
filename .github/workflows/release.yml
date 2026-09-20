@@ -164,6 +164,7 @@ jobs:
 
           & $nsis `
             "/DSRC=$dist" "/DVERSION=${{ needs.plan.outputs.version }}" `
+            "/DICON=$PWD\packaging\windows\icon.ico" `
             "/DOUT=$PWD\target\dist\EasyFortran77-${{ needs.plan.outputs.version }}-Setup.exe" `
             packaging\windows\installer.nsi
           if ($LASTEXITCODE -ne 0) { throw "makensis failed with $LASTEXITCODE" }

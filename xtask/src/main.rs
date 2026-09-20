@@ -6,6 +6,7 @@
 
 mod fetch;
 mod glob;
+mod icons;
 mod package;
 
 use anyhow::{bail, Result};
@@ -18,6 +19,7 @@ fn main() -> Result<()> {
         Some("fetch-toolchain") => fetch::run(&args[1..]),
         Some("fetch-sources") => fetch::sources(&args[1..]),
         Some("package") => package::run(&args[1..]),
+        Some("gen-icons") => icons::run(&args[1..]),
         Some("version") => {
             println!("{}", package::workspace_version(&repo_root())?);
             Ok(())
@@ -34,6 +36,7 @@ USAGE:
     cargo xtask fetch-sources   [--target <name>] [--out <dir>] [--list]
     cargo xtask package         [--target <name>] [--profile <p>] [--no-archive]
     cargo xtask version
+    cargo xtask gen-icons
 ";
 
 struct Violation {

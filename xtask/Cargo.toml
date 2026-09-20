@@ -13,6 +13,9 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 flate2 = "1.1.10"
+# PNG only: the default feature set pulls in a codec for every format there is,
+# and this reads one file.
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 serde = { workspace = true, features = ["derive"] }
 sha2.workspace = true
 tar = "0.4.46"

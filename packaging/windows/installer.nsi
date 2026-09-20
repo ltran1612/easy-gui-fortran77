@@ -50,6 +50,20 @@ VIAddVersionKey "FileDescription" "${APPNAME} installer"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "MIT OR Apache-2.0; bundled GNU toolchain under GPLv3"
 
+; The icon on Setup.exe is the first thing the user sees, before anything is
+; installed -- it is on the file they download. Same artwork as the application
+; and the uninstaller, generated from logo.png by `cargo xtask gen-icons`.
+;
+; Required rather than defaulted, like SRC. `${__FILEDIR__}` looked like the
+; obvious default and is not dependable: invoked from the repository root it
+; yielded `packaging/windows/\icon.ico` and from this directory `.icon.ico`,
+; neither of which opens. One explicit path has one behaviour.
+!ifndef ICON
+  !error "ICON must be defined: the path to icon.ico (cargo xtask gen-icons)"
+!endif
+!define MUI_ICON "${ICON}"
+!define MUI_UNICON "${ICON}"
+
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "${APPNAME}"
 !define MUI_WELCOMEPAGE_TEXT "Chương trình này giúp bạn biên dịch các chương trình Fortran 77 mà không cần dùng dòng lệnh.$\r$\n$\r$\nThis installs ${APPNAME}, which compiles Fortran 77 programs without needing a command line.$\r$\n$\r$\nNó sẽ được cài vào thư mục cá nhân của bạn, nên không cần quyền quản trị.$\r$\nIt installs into your own user folder, so no administrator rights are needed."
