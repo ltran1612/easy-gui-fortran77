@@ -154,16 +154,17 @@ fn check_i18n_keys(root: &Path, v: &mut Vec<Violation>) -> Result<()> {
     Ok(())
 }
 
-/// Blank out `//` comments, keeping every byte offset and newline in place.
+/// Does a `#[cfg(...)]` attribute gate on code being *built as a test*?
 ///
-/// Without this the doc comment on the `tr!` macro — which spells out
-/// `tr!(lang, "key")` — is read as a call site naming a key called `key`.
-/// Does a `#[cfg(...)]` attribute gate on `test` as a bare predicate?
+/// Two things it must not say yes to, both of which would hand an exemption to
+/// ordinary code and silently switch these rules off for it:
 ///
-/// String literals are ignored first, so `#[cfg(feature = "test-utils")]` does
-/// not count: that gates on a feature whose name merely reads like one.
+///   * `#[cfg(feature = "test-utils")]` — a feature whose name reads like one.
+///     String literals are removed before anything else is looked at.
+///   * `#[cfg(not(test))]` — which gates on *not* being a test, so it marks
+///     production code. Every `not(...)` group is removed, nesting included.
 fn cfg_gates_on_test(line: &str) -> bool {
-    let mut outside = String::new();
+    let mut chars: Vec<char> = Vec::new();
     let mut in_string = false;
     for c in line.chars() {
         if c == '"' {
@@ -171,14 +172,44 @@ fn cfg_gates_on_test(line: &str) -> bool {
             continue;
         }
         if !in_string {
-            outside.push(c);
+            chars.push(c);
         }
     }
-    outside
-        .split(|c: char| !c.is_alphanumeric() && c != '_')
+
+    let mut kept = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let starts_not = chars[i..].starts_with(&['n', 'o', 't', '('])
+            && (i == 0 || !(chars[i - 1].is_alphanumeric() || chars[i - 1] == '_'));
+        if starts_not {
+            let mut depth = 0usize;
+            let mut j = i + 3;
+            while j < chars.len() {
+                if chars[j] == '(' {
+                    depth += 1;
+                } else if chars[j] == ')' {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                j += 1;
+            }
+            i = j + 1;
+            continue;
+        }
+        kept.push(chars[i]);
+        i += 1;
+    }
+
+    kept.split(|c: char| !c.is_alphanumeric() && c != '_')
         .any(|token| token == "test")
 }
 
+/// Blank out `//` comments, keeping every byte offset and newline in place.
+///
+/// Without this the doc comment on the `tr!` macro — which spells out
+/// `tr!(lang, "key")` — is read as a call site naming a key called `key`.
 fn blank_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for line in text.split_inclusive('\n') {
@@ -244,6 +275,7 @@ fn check_hygiene() -> Result<()> {
             || rel_str.contains("xtask/");
 
         let mut in_test_mod = false;
+        let mut pending_test_attr = false;
         let mut brace_depth_at_test = 0usize;
         let mut depth = 0usize;
 
@@ -254,9 +286,19 @@ fn check_hygiene() -> Result<()> {
             // ordinary, and matching the literal string let one slip past --
             // silently withdrawing the exemption from a module that plainly is
             // tests, and reporting it as a violation.
+            //
+            // Only a `mod` opens the exempt region. A `#[cfg(test)]` on a `use`
+            // or a single function does not: taking the attribute alone as the
+            // trigger left the exemption standing until the next closing brace,
+            // which is to say over whatever ordinary code happened to follow.
             if line.starts_with("#[cfg(") && cfg_gates_on_test(line) {
-                in_test_mod = true;
-                brace_depth_at_test = depth;
+                pending_test_attr = true;
+            } else if pending_test_attr && !line.is_empty() && !line.starts_with('#') {
+                if line.starts_with("mod ") || line.starts_with("pub mod ") {
+                    in_test_mod = true;
+                    brace_depth_at_test = depth;
+                }
+                pending_test_attr = false;
             }
             depth += raw.matches('{').count();
             depth = depth.saturating_sub(raw.matches('}').count());

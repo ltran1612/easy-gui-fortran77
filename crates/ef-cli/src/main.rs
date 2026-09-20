@@ -71,17 +71,30 @@ fn real_main() -> Result<()> {
             let o = parse(&rest)?;
             let (paths, outcome, _) = do_build(&o)?;
             report_build(&o, &outcome);
-            if !outcome.success {
-                std::process::exit(1);
-            }
+
+            let guard = FsGuard::new(paths.write_roots().to_vec())?;
             if let (Some(dest), Some(built)) = (&o.out, &outcome.exe) {
-                let guard = FsGuard::new(paths.write_roots().to_vec())?;
                 guard
                     .export_built_program(built, dest)
                     .with_context(|| format!("saving to {}", dest.display()))?;
                 if !o.json {
                     println!("saved: {}", dest.display());
                 }
+            }
+
+            // Clear up, after the export has taken what it needs out of the
+            // tree. `ef-cli` used to leave one behind on every single run and
+            // sweep nothing, which is most of why 52 of them had collected: the
+            // application at least removes its own on a graceful exit.
+            let _ = guard.remove_dir_all(&paths.session_work_dir());
+            guard.sweep_stale_sessions(
+                &paths.work_root(),
+                paths.session_id(),
+                std::time::Duration::from_secs(24 * 60 * 60),
+            );
+
+            if !outcome.success {
+                std::process::exit(1);
             }
             Ok(())
         }

@@ -390,6 +390,16 @@ impl App {
         self.bottom = BottomTab::Messages;
 
         self.build_seq += 1;
+        // The previous build's tree is finished with the moment a new one
+        // starts: its program has either been saved or superseded. Without this
+        // a session that builds fifty times keeps fifty complete work trees,
+        // each holding a statically linked executable — the same accumulation
+        // the stale-session sweep exists for, except inside the live session,
+        // which the sweep skips by design and so can never reach.
+        if self.build_seq > 1 {
+            let previous = self.store.paths().build_dir(self.build_seq - 1);
+            let _ = self.store.guard().remove_dir_all(&previous);
+        }
         let layout = WorkLayout::new(self.store.paths().build_dir(self.build_seq));
         let cancel = Arc::new(AtomicBool::new(false));
         let guard = self.store.guard().clone();

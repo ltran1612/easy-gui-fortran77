@@ -167,6 +167,7 @@ fn build_inner(
     let total = staging.sources.len();
     let mut all_diags: Vec<Diagnostic> = Vec::new();
     let mut raw = String::new();
+    let mut log_full = false;
     let mut compile_failed = false;
 
     for (i, src) in staging.sources.iter().enumerate() {
@@ -192,9 +193,8 @@ fn build_inner(
             &staging.include_dirs,
         ));
 
-        let (code, text) =
-            exec::run_capture(cmd, COMPILER_OUTPUT_CAP.saturating_sub(raw.len()), cancel)?;
-        raw.push_str(&text);
+        let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
+        append_capped(&mut raw, &text, &mut log_full);
 
         let mut diags = diagnostics::parse(&text);
         diagnostics::rewrite_names(&mut diags, &staging.sources);
@@ -219,12 +219,11 @@ fn build_inner(
     let mut objs: Vec<PathBuf> = staging.sources.iter().map(|s| s.obj.clone()).collect();
 
     if program.options.wants_pause_shim(toolchain.exe_suffix()) {
-        let room = COMPILER_OUTPUT_CAP.saturating_sub(raw.len());
-        match compile_pause_shim(guard, toolchain, layout, room, cancel) {
+        match compile_pause_shim(guard, toolchain, layout, cancel) {
             Ok((obj, text)) => {
                 // Its output joins the rest, so a failure here does not throw
                 // away what the user's own files had to say.
-                raw.push_str(&text);
+                append_capped(&mut raw, &text, &mut log_full);
                 // Stop pressed while this was compiling. `run_capture` killed the
                 // child, so the non-zero exit below is ours to interpret, not a
                 // failure to report. Checked here and not in an `Err` arm, because
@@ -242,6 +241,13 @@ fn build_inner(
                     }
                 }
             }
+            // An I/O error raised while Stop was being pressed is not worth
+            // reporting as a failure -- and reporting it costs every diagnostic
+            // the compile loop had already gathered, because `?` leaves through
+            // the catch-all with an empty outcome.
+            Err(_) if cancel.load(Ordering::Relaxed) => {
+                return Ok(cancelled(all_diags, raw));
+            }
             Err(e) => return Err(e),
         }
     }
@@ -258,9 +264,8 @@ fn build_inner(
         toolchain.exe_suffix(),
     ));
 
-    let (code, text) =
-        exec::run_capture(cmd, COMPILER_OUTPUT_CAP.saturating_sub(raw.len()), cancel)?;
-    raw.push_str(&text);
+    let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
+    append_capped(&mut raw, &text, &mut log_full);
     // Stop pressed while linking. Without this the killed linker's non-zero exit
     // reads as a link failure, and the user who asked the build to stop is shown
     // a red "Build failed" with no errors in it.
@@ -312,7 +317,6 @@ fn compile_pause_shim(
     guard: &FsGuard,
     toolchain: &Toolchain,
     layout: &WorkLayout,
-    room: usize,
     cancel: &AtomicBool,
 ) -> Result<(Option<PathBuf>, String)> {
     // Compiled on every build. The same bytes every run -- the source is baked
@@ -330,7 +334,7 @@ fn compile_pause_shim(
         &obj,
         layout,
     ));
-    let (code, text) = exec::run_capture(cmd, room, cancel)?;
+    let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
     // The compiler's own words go back to the caller to join `raw`, rather than
     // into the message the user reads. This is our file, not theirs, so the
     // message says so in one sentence and the English belongs in the details
@@ -339,6 +343,34 @@ fn compile_pause_shim(
         return Ok((None, text));
     }
     Ok((Some(obj), text))
+}
+
+/// Add compiler output to the build's log, bounded.
+///
+/// The bound is on what the build *keeps*, never on what a file is allowed to
+/// print. Capping each invocation separately lets sixty files hold sixty times
+/// the cap; spending one shared budget as the build goes is worse still, because
+/// the file that exhausts it leaves every later file with nothing to parse and
+/// their errors disappear from the panel while the build still reports failure.
+///
+/// So each file is read and parsed in full, and only this accumulated log is
+/// trimmed — once, with one notice, not once per file.
+fn append_capped(raw: &mut String, text: &str, full: &mut bool) {
+    if *full {
+        return;
+    }
+    let room = COMPILER_OUTPUT_CAP.saturating_sub(raw.len());
+    if text.len() <= room {
+        raw.push_str(text);
+        return;
+    }
+    let mut end = room;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    raw.push_str(&text[..end]);
+    raw.push_str("\n… (rest of the compiler output omitted)\n");
+    *full = true;
 }
 
 fn cancelled(diagnostics: Vec<Diagnostic>, raw: String) -> BuildOutcome {

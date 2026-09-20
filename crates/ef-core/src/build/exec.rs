@@ -55,13 +55,17 @@ pub fn harden(cmd: &mut Command) {
 /// is that `run_capture` stops waiting for the pipe after a cancel, whether or
 /// not this managed to kill anything. This only decides whether the compiler's
 /// orphans die now or run to completion unnoticed.
-fn stop(child: &mut Child) {
+fn stop(child: &mut Child) -> bool {
     let pid = child.id();
 
     #[cfg(unix)]
     let mut killer = {
         let mut c = Command::new("kill");
-        c.args(["-KILL", &format!("-{pid}")]);
+        // `-s KILL` and `--` rather than `-KILL -<pgid>`: a bare negative pid
+        // is a leading dash, and implementations differ about whether that is a
+        // process group or a second signal name. Verified that this form kills
+        // the whole group.
+        c.args(["-s", "KILL", "--", &format!("-{pid}")]);
         c
     };
     #[cfg(windows)]
@@ -76,17 +80,24 @@ fn stop(child: &mut Child) {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     harden(&mut killer);
-    match killer.status() {
-        Ok(s) if s.success() => {}
+    let signalled = match killer.status() {
+        Ok(s) if s.success() => true,
         // Worth a line in the log rather than silence: it is the difference
         // between the compiler's children dying now and running to completion
         // unnoticed, and it varies by distribution in ways that are not obvious.
-        Ok(s) => tracing::debug!("could not signal the compiler's process group: {s}"),
-        Err(e) => tracing::debug!("no way to signal the compiler's process group: {e}"),
-    }
+        Ok(s) => {
+            tracing::debug!("could not signal the compiler's process group: {s}");
+            false
+        }
+        Err(e) => {
+            tracing::debug!("no way to signal the compiler's process group: {e}");
+            false
+        }
+    };
 
     // Belt and braces: if that could not run at all, at least the driver dies.
     let _ = child.kill();
+    signalled
 }
 
 /// Run a command to completion, capturing stdout and stderr interleaved, with a
@@ -123,6 +134,18 @@ pub fn run_capture(
     let dropped = Arc::clone(&dropped_any);
     let done = Arc::clone(&reader_done);
     let pump = std::thread::spawn(move || {
+        // On drop rather than at the end of the body, so that a panic — which
+        // skips the last statement — still records that nobody is reading any
+        // more. Otherwise the wait below spends its whole timeout and the note
+        // about lost output is never added.
+        struct MarkDone(Arc<AtomicBool>);
+        impl Drop for MarkDone {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let _mark = MarkDone(done);
+
         let mut buf = [0u8; READ_CHUNK];
         loop {
             match reader.read(&mut buf) {
@@ -143,13 +166,12 @@ pub fn run_capture(
                 }
             }
         }
-        done.store(true, Ordering::Relaxed);
     });
 
     let mut stopped = false;
     let status = loop {
         if !stopped && cancel.load(Ordering::Relaxed) {
-            stop(&mut child);
+            let _ = stop(&mut child);
             stopped = true;
         }
         match child.try_wait() {
@@ -172,7 +194,14 @@ pub fn run_capture(
         while !reader_done.load(Ordering::Relaxed) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(5));
         }
-        reader_done.load(Ordering::Relaxed)
+        let done = reader_done.load(Ordering::Relaxed);
+        if !done {
+            tracing::debug!(
+                "the compiler's output pipe is still open after cancelling: its \
+                 children are probably still running"
+            );
+        }
+        done
     } else {
         true
     };
@@ -214,7 +243,7 @@ pub fn run_capture(
     // or was killed for running out of memory. Cancelling is the one legitimate
     // way to get here, and says so for itself.
     #[cfg(unix)]
-    if code.is_none() && !cancel.load(Ordering::Relaxed) {
+    if code.is_none() && !stopped {
         use std::os::unix::process::ExitStatusExt;
         if let Some(sig) = status.signal() {
             text.push_str(&format!(
@@ -230,6 +259,59 @@ pub fn run_capture(
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+
+    /// `stop` must take the compiler's children with it, where it can.
+    ///
+    /// The test above deliberately passes whether or not the group kill lands,
+    /// because what it guards is that Stop *returns*. That leaves `stop` itself
+    /// uncovered, and `stop` is the half that decides whether an abandoned
+    /// compile keeps burning a core until it finishes.
+    ///
+    /// So this covers it directly, and conditionally: the assertion is made only
+    /// when `stop` reports that it managed to signal the group. On a machine
+    /// where `kill` is a shell builtin with no binary behind it, there is
+    /// nothing to assert and the test says so rather than failing — which is the
+    /// honest shape, since the behaviour genuinely is unavailable there.
+    #[test]
+    fn stopping_takes_the_whole_process_group_where_it_can() {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "sleep 30 & wait"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // The same call the real path makes: it is what puts the child in a
+        // group of its own, and so what makes the group killable.
+        harden(&mut cmd);
+        let mut child = cmd.spawn().expect("sh should spawn");
+        // The group is named by the leader's pid, read before it is reaped.
+        let pid = child.id();
+        // Let the backgrounded child come into existence first.
+        std::thread::sleep(Duration::from_millis(200));
+
+        let signalled = stop(&mut child);
+        let _ = child.wait();
+
+        if !signalled {
+            eprintln!("skipping: no usable `kill` binary on this machine");
+            return;
+        }
+
+        std::thread::sleep(Duration::from_millis(200));
+        // `pgrep -g` selects by process group. (`ps -g` selects by session, and
+        // using it here made this test pass while the group was untouched.)
+        let Ok(out) = Command::new("pgrep")
+            .args(["-g", &pid.to_string()])
+            .output()
+        else {
+            eprintln!("skipping the assertion: no `pgrep` to observe the group with");
+            return;
+        };
+        let alive = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        assert!(
+            alive.is_empty(),
+            "the compiler's children outlived the kill, pids still in the group: {alive:?}"
+        );
+    }
 
     /// Cancelling must return promptly even when the compiler leaves children
     /// behind.

@@ -187,8 +187,6 @@ impl FsGuard {
         }
     }
 
-    /// Recursive delete. The containment assertion matters most here: this is the
-    /// one call that could do real damage if a path were ever wrong.
     /// Delete work trees left behind by sessions that are no longer running.
     ///
     /// Each run gets its own directory under the work root, named by a fresh
@@ -221,23 +219,40 @@ impl FsGuard {
             if entry.file_name() == keep {
                 continue;
             }
-            let path = entry.path();
-            if !path.is_dir() {
+            // One stat, used for both decisions. `path.is_dir()` follows a
+            // symlink while `entry.metadata()` does not, so asking each in turn
+            // meant judging a link's age by the link and its kind by the target.
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if !kind.is_dir() {
                 continue;
             }
+            let path = entry.path();
             let stale = entry
                 .metadata()
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|m| now.duration_since(m).ok())
                 .is_some_and(|age| age > older_than);
-            if stale && self.remove_dir_all(&path).is_ok() {
-                swept += 1;
+            if !stale {
+                continue;
+            }
+            match self.remove_dir_all(&path) {
+                Ok(()) => swept += 1,
+                // Said rather than swallowed. A work root that can be read but
+                // never deleted from — a permissions change, or Windows refusing
+                // to remove files an orphaned compiler still holds open — would
+                // otherwise accumulate trees forever with no evidence anywhere
+                // that housekeeping was running at all.
+                Err(e) => tracing::debug!("could not remove {}: {e}", path.display()),
             }
         }
         swept
     }
 
+    /// Recursive delete. The containment assertion matters most here: this is the
+    /// one call that could do real damage if a path were ever wrong.
     pub fn remove_dir_all(&self, path: &Path) -> Result<()> {
         self.assert_under_write_root(path)?;
         // Belt and braces: never recursively delete a write root itself.
@@ -638,7 +653,11 @@ mod tests {
         );
         assert!(a.exists() && b.exists() && mine.exists());
 
-        // With no age requirement, every session but ours is stale.
+        // With no age requirement, every session but ours is stale. The pause
+        // is because "stale" means strictly older, and these were made a moment
+        // ago — on a filesystem with coarse timestamps they could otherwise
+        // still be stamped in the present.
+        std::thread::sleep(std::time::Duration::from_millis(20));
         assert_eq!(
             g.sweep_stale_sessions(&work, "mine", std::time::Duration::ZERO),
             2
