@@ -30,6 +30,20 @@ job.
 bundled Windows toolchain, installer, auto-update and integrity verification are
 v0.2 and v1.0 work.
 
+## Something to try it on
+
+`examples/` holds three small programs, with a bilingual guide beside them:
+
+| | |
+|---|---|
+| `DAMBTCT.FOR` | one file, a reinforced-concrete beam check. Compiles clean. |
+| `NHIEUTEP/` | two sources plus an `INCLUDE` the application resolves on its own. Warns, does not fail. |
+| `LOI-COT72.FOR` | broken on purpose — a line past column 72, which is the trap card-image code falls into. The "132 columns" option is the fix. |
+
+All four outcomes are asserted by `cargo test -p ef-testkit --test examples`,
+including that the broken one still fails and still stops failing at 132
+columns. An example that quietly stopped working would be worse than none.
+
 ## Building and running
 
 ```sh
