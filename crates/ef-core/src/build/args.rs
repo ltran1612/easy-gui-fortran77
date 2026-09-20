@@ -252,7 +252,6 @@ mod tests {
             staged_name: "solver.f".into(),
             display_name: "SOLVER.FOR".into(),
             obj: layout.obj().join("solver.o"),
-            sha256: String::new(),
         };
         (layout, src)
     }

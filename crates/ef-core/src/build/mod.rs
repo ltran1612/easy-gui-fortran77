@@ -20,7 +20,7 @@ use crate::paths::WorkLayout;
 use crate::project::Program;
 use crate::toolchain::Toolchain;
 use crossbeam_channel::Sender;
-use diagnostics::{Diagnostic, Severity};
+use diagnostics::Diagnostic;
 use stage::Staging;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -218,7 +218,18 @@ fn build_inner(
     let mut objs: Vec<PathBuf> = staging.sources.iter().map(|s| s.obj.clone()).collect();
 
     if program.options.wants_pause_shim(toolchain.exe_suffix()) {
-        objs.push(compile_pause_shim(guard, toolchain, layout, cancel)?);
+        match compile_pause_shim(guard, toolchain, layout, cancel) {
+            Ok(obj) => objs.push(obj),
+            // Stop was pressed while this was compiling, so `run_capture` killed
+            // the child and the non-zero exit is ours to interpret rather than
+            // the user's to read about. Every other step in this function already
+            // checks the flag; this one did not, and it matters more now that the
+            // shim is compiled on every build instead of once per session.
+            Err(_) if cancel.load(Ordering::Relaxed) => {
+                return Ok(cancelled(all_diags, raw));
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     emit(tx, BuildEvent::Phase(BuildPhase::Linking));
@@ -282,16 +293,12 @@ fn compile_pause_shim(
     layout: &WorkLayout,
     cancel: &AtomicBool,
 ) -> Result<PathBuf> {
-    let obj = layout.obj().join("ef77_pause_shim.o");
-
-    // Compiled every time, deliberately. It produces the same bytes on every
-    // run -- the source is baked in with `include_str!` -- so it is cacheable,
-    // and it was cached for a while. Keeping it meant a cache path, a key, an
-    // invalidation rule and two tests, to save about what compiling one of the
-    // user's own files costs on a build that already takes half a second. The
-    // build tree is scratch space that is thrown away; this is a build step
-    // like any other, and it stays one.
+    // Compiled on every build. The same bytes every run -- the source is baked
+    // in with `include_str!` -- so it is cacheable, and deliberately is not: the
+    // build tree is scratch, and the saving does not pay for a key and an
+    // invalidation rule.
     let src = layout.src().join("ef77_pause_shim.f90");
+    let obj = layout.obj().join("ef77_pause_shim.o");
     guard.write_file(&src, PAUSE_SHIM.as_bytes())?;
 
     let mut cmd = toolchain.command(layout);
@@ -307,7 +314,6 @@ fn compile_pause_shim(
             "could not build the part that keeps the window open:\n{text}"
         )));
     }
-
     Ok(obj)
 }
 
@@ -315,10 +321,7 @@ fn cancelled(diagnostics: Vec<Diagnostic>, raw: String) -> BuildOutcome {
     BuildOutcome {
         success: false,
         exe: None,
-        errors: diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Error)
-            .count(),
+        errors: diagnostics::count_errors(&diagnostics),
         warnings: diagnostics::count_warnings(&diagnostics),
         diagnostics,
         raw,

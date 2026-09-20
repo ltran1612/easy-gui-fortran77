@@ -302,7 +302,6 @@ collect2: error: ld returned 1 exit status
             staged_name: "solver.f".into(),
             display_name: "SOLVER.FOR".into(),
             obj: PathBuf::from("/work/obj/solver.o"),
-            sha256: String::new(),
         }];
         rewrite_names(&mut d, &staged);
         assert_eq!(d[0].file.as_deref(), Some("SOLVER.FOR"));

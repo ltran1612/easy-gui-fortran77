@@ -611,9 +611,9 @@ fn check_driver_present(bundle: &Path, template: &Path) -> Result<()> {
 /// `gcc_version` in the recipe, the package filenames it pins, `version` in the
 /// bundle descriptor, and the `-B` paths inside that descriptor which name the
 /// GCC version as a directory component. A bump that updates three of the four
-/// is the realistic mistake, and two of its outcomes are quiet: the descriptor
+/// is the realistic mistake, and one of its outcomes is quiet: the descriptor
 /// reports a version the binaries are not, which is what the application shows
-/// the user and what the shim cache keys on.
+/// the user.
 ///
 /// This is what makes "pinned" mean something. Without it the recipe records an
 /// intention and nothing checks the result.
@@ -639,8 +639,7 @@ fn check_version_is_pinned(recipe: &Recipe, template: &Path, bundle: &Path) -> R
         fs::read_to_string(template).with_context(|| format!("reading {}", template.display()))?;
 
     // 2. The version the descriptor declares, which is the one the application
-    //    reports and caches on -- it is taken on trust at runtime, so it is
-    //    checked here instead.
+    //    reports -- it is taken on trust at runtime, so it is checked here.
     let declared = text
         .lines()
         .find_map(|l| l.trim().strip_prefix("version"))

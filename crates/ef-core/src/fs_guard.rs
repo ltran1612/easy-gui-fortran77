@@ -102,7 +102,7 @@ impl FsGuard {
         fs::metadata(path).map_err(|e| EfError::io(path, e))
     }
 
-    /// Read one of our own files (config, cache). Missing file yields `Ok(None)`.
+    /// Read one of our own files. Missing file yields `Ok(None)`.
     pub fn read_app_file(&self, path: &Path) -> Result<Option<Vec<u8>>> {
         self.assert_under_write_root(path)?;
         match fs::read(path) {

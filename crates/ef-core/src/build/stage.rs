@@ -21,7 +21,6 @@ use crate::fs_guard::{FsGuard, MAX_TOTAL_SOURCE_BYTES};
 use crate::paths::WorkLayout;
 use crate::project::{Preprocess, Program};
 use crate::text;
-use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -36,8 +35,6 @@ pub struct StagedSource {
     pub display_name: String,
     /// Object file this source compiles to.
     pub obj: PathBuf,
-    /// Content hash. Unused in v0.1; the key for object caching later.
-    pub sha256: String,
 }
 
 /// One of the user's pre-compiled libraries, copied into the work tree.
@@ -266,7 +263,6 @@ pub fn stage(
             staged_name,
             display_name: text::display_file_name(&src.path),
             obj,
-            sha256: format!("{:x}", Sha256::digest(&bytes)),
         });
     }
 
