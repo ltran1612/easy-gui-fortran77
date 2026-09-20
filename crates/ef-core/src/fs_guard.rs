@@ -189,6 +189,55 @@ impl FsGuard {
 
     /// Recursive delete. The containment assertion matters most here: this is the
     /// one call that could do real damage if a path were ever wrong.
+    /// Delete work trees left behind by sessions that are no longer running.
+    ///
+    /// Each run gets its own directory under the work root, named by a fresh
+    /// uuid, and deletes it on the way out. Nothing deletes one after a crash, a
+    /// kill, or a machine losing power mid-build — and `ef-cli` never deletes
+    /// its own at all. They accumulate forever: this machine had 52 of them
+    /// holding 77 MB, mostly statically linked programs of a few megabytes each.
+    /// On the machine this is written for, nobody will ever find them.
+    ///
+    /// Age is the test for "no longer running", because there is no lock to
+    /// consult and a directory gives no other evidence. `older_than` is
+    /// deliberately generous: a second copy of the application that has been
+    /// open, idle and untouched for longer than that would lose scratch space
+    /// it is not using, and would recreate it on its next build.
+    ///
+    /// Best effort throughout. A tree that will not delete is skipped rather
+    /// than failing a startup over housekeeping.
+    pub fn sweep_stale_sessions(
+        &self,
+        work_root: &Path,
+        keep: &str,
+        older_than: std::time::Duration,
+    ) -> usize {
+        let Ok(entries) = fs::read_dir(work_root) else {
+            return 0;
+        };
+        let now = std::time::SystemTime::now();
+        let mut swept = 0;
+        for entry in entries.flatten() {
+            if entry.file_name() == keep {
+                continue;
+            }
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let stale = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|m| now.duration_since(m).ok())
+                .is_some_and(|age| age > older_than);
+            if stale && self.remove_dir_all(&path).is_ok() {
+                swept += 1;
+            }
+        }
+        swept
+    }
+
     pub fn remove_dir_all(&self, path: &Path) -> Result<()> {
         self.assert_under_write_root(path)?;
         // Belt and braces: never recursively delete a write root itself.
@@ -561,6 +610,43 @@ mod tests {
             fs::read(&source_file).unwrap(),
             b"      END\n",
             "the source file survived"
+        );
+    }
+
+    #[test]
+    fn the_sweep_spares_our_own_session_and_anything_recent() {
+        // Both directions, without backdating a directory: with no age
+        // requirement everything but our own goes, and with one nothing does,
+        // because all three were made a moment ago.
+        let td = tempfile::tempdir().unwrap();
+        let work = td.path().join("work");
+        let g = FsGuard::new(vec![work.clone()]).unwrap();
+
+        let make = |name: &str| {
+            let d = work.join(name);
+            std::fs::create_dir_all(d.join("build-1")).unwrap();
+            std::fs::write(d.join("build-1/prog.exe"), b"x").unwrap();
+            d
+        };
+        let (mine, a, b) = (make("mine"), make("older"), make("other"));
+
+        // Nothing is old enough yet: a copy of the application that is still
+        // running must not have its scratch deleted underneath it.
+        assert_eq!(
+            g.sweep_stale_sessions(&work, "mine", std::time::Duration::from_secs(3600)),
+            0
+        );
+        assert!(a.exists() && b.exists() && mine.exists());
+
+        // With no age requirement, every session but ours is stale.
+        assert_eq!(
+            g.sweep_stale_sessions(&work, "mine", std::time::Duration::ZERO),
+            2
+        );
+        assert!(!a.exists() && !b.exists(), "stale trees must be removed");
+        assert!(
+            mine.exists(),
+            "our own session is never swept, whatever its age"
         );
     }
 

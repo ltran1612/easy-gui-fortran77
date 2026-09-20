@@ -288,7 +288,21 @@ fn a_build_can_be_cancelled_while_the_compiler_is_running() {
         Arc::clone(&cancel),
     );
 
-    std::thread::sleep(Duration::from_millis(300));
+    // Wait for the build to say it has started compiling, rather than sleeping
+    // a fixed time and hoping. On a loaded machine staging can outlast the
+    // sleep, and then `cancel` is already set when the loop reaches its first
+    // check: the build returns cancelled without ever starting a compiler, and
+    // the test passes having exercised none of the kill path.
+    loop {
+        match rx.recv_timeout(Duration::from_secs(20)) {
+            Ok(BuildEvent::Phase(BuildPhase::Compiling { .. })) => break,
+            Ok(_) => {}
+            Err(e) => panic!("the compiler never started: {e}"),
+        }
+    }
+    // The phase is emitted just before the spawn, so give the child a moment to
+    // exist before killing it.
+    std::thread::sleep(Duration::from_millis(150));
     cancel.store(true, Ordering::SeqCst);
 
     let start = std::time::Instant::now();

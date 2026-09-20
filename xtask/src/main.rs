@@ -158,6 +158,27 @@ fn check_i18n_keys(root: &Path, v: &mut Vec<Violation>) -> Result<()> {
 ///
 /// Without this the doc comment on the `tr!` macro — which spells out
 /// `tr!(lang, "key")` — is read as a call site naming a key called `key`.
+/// Does a `#[cfg(...)]` attribute gate on `test` as a bare predicate?
+///
+/// String literals are ignored first, so `#[cfg(feature = "test-utils")]` does
+/// not count: that gates on a feature whose name merely reads like one.
+fn cfg_gates_on_test(line: &str) -> bool {
+    let mut outside = String::new();
+    let mut in_string = false;
+    for c in line.chars() {
+        if c == '"' {
+            in_string = !in_string;
+            continue;
+        }
+        if !in_string {
+            outside.push(c);
+        }
+    }
+    outside
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .any(|token| token == "test")
+}
+
 fn blank_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for line in text.split_inclusive('\n') {
@@ -228,8 +249,12 @@ fn check_hygiene() -> Result<()> {
 
         for (i, raw) in text.lines().enumerate() {
             let line = raw.trim();
-            // Track `#[cfg(test)] mod tests` so unit tests may use anything.
-            if line.starts_with("#[cfg(test)]") {
+            // Track a test module so unit tests may use anything. `#[cfg(test)]`
+            // is the usual spelling, but `#[cfg(all(test, unix))]` is just as
+            // ordinary, and matching the literal string let one slip past --
+            // silently withdrawing the exemption from a module that plainly is
+            // tests, and reporting it as a violation.
+            if line.starts_with("#[cfg(") && cfg_gates_on_test(line) {
                 in_test_mod = true;
                 brace_depth_at_test = depth;
             }

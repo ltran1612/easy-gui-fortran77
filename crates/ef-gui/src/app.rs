@@ -120,6 +120,26 @@ impl App {
         let paths = AppPaths::resolve().unwrap_or_else(|_| AppPaths::under(std::env::temp_dir()));
         let mut store = Store::new(paths).expect("the application data directory is not writable");
 
+        // Clear up after sessions that never got to clean up after themselves —
+        // a crash, a kill, or a `ef-cli` run, none of which delete their work
+        // tree. On a thread of its own because nothing here depends on the
+        // answer and the window should not wait on the disk to open.
+        {
+            let guard = store.guard().clone();
+            let work_root = store.paths().work_root();
+            let keep = store.paths().session_id().to_string();
+            std::thread::spawn(move || {
+                let swept = guard.sweep_stale_sessions(
+                    &work_root,
+                    &keep,
+                    std::time::Duration::from_secs(24 * 60 * 60),
+                );
+                if swept > 0 {
+                    tracing::info!("removed {swept} work folder(s) left by earlier sessions");
+                }
+            });
+        }
+
         let (mut settings, settings_note) = store
             .load_settings()
             .unwrap_or_else(|_| (Settings::default(), LoadNote::Fresh));

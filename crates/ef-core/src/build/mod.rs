@@ -192,7 +192,8 @@ fn build_inner(
             &staging.include_dirs,
         ));
 
-        let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
+        let (code, text) =
+            exec::run_capture(cmd, COMPILER_OUTPUT_CAP.saturating_sub(raw.len()), cancel)?;
         raw.push_str(&text);
 
         let mut diags = diagnostics::parse(&text);
@@ -218,15 +219,28 @@ fn build_inner(
     let mut objs: Vec<PathBuf> = staging.sources.iter().map(|s| s.obj.clone()).collect();
 
     if program.options.wants_pause_shim(toolchain.exe_suffix()) {
-        match compile_pause_shim(guard, toolchain, layout, cancel) {
-            Ok(obj) => objs.push(obj),
-            // Stop was pressed while this was compiling, so `run_capture` killed
-            // the child and the non-zero exit is ours to interpret rather than
-            // the user's to read about. The compile loop above checks the flag;
-            // this step and the link below did not, and it matters more here now
-            // that the shim is compiled on every build rather than once a session.
-            Err(_) if cancel.load(Ordering::Relaxed) => {
-                return Ok(cancelled(all_diags, raw));
+        let room = COMPILER_OUTPUT_CAP.saturating_sub(raw.len());
+        match compile_pause_shim(guard, toolchain, layout, room, cancel) {
+            Ok((obj, text)) => {
+                // Its output joins the rest, so a failure here does not throw
+                // away what the user's own files had to say.
+                raw.push_str(&text);
+                // Stop pressed while this was compiling. `run_capture` killed the
+                // child, so the non-zero exit below is ours to interpret, not a
+                // failure to report. Checked here and not in an `Err` arm, because
+                // a killed compile comes back as a failed compile, not an error.
+                if cancel.load(Ordering::Relaxed) {
+                    return Ok(cancelled(all_diags, raw));
+                }
+                match obj {
+                    Some(o) => objs.push(o),
+                    None => {
+                        let mut out = BuildOutcome::failure(FailedAt::Compile, all_diags, raw);
+                        out.internal_error =
+                            Some("could not build the part that keeps the window open".into());
+                        return Ok(out);
+                    }
+                }
             }
             Err(e) => return Err(e),
         }
@@ -244,7 +258,8 @@ fn build_inner(
         toolchain.exe_suffix(),
     ));
 
-    let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
+    let (code, text) =
+        exec::run_capture(cmd, COMPILER_OUTPUT_CAP.saturating_sub(raw.len()), cancel)?;
     raw.push_str(&text);
     // Stop pressed while linking. Without this the killed linker's non-zero exit
     // reads as a link failure, and the user who asked the build to stop is shown
@@ -297,8 +312,9 @@ fn compile_pause_shim(
     guard: &FsGuard,
     toolchain: &Toolchain,
     layout: &WorkLayout,
+    room: usize,
     cancel: &AtomicBool,
-) -> Result<PathBuf> {
+) -> Result<(Option<PathBuf>, String)> {
     // Compiled on every build. The same bytes every run -- the source is baked
     // in with `include_str!` -- so it is cacheable, and deliberately is not: the
     // build tree is scratch, and the saving does not pay for a key and an
@@ -314,13 +330,15 @@ fn compile_pause_shim(
         &obj,
         layout,
     ));
-    let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
+    let (code, text) = exec::run_capture(cmd, room, cancel)?;
+    // The compiler's own words go back to the caller to join `raw`, rather than
+    // into the message the user reads. This is our file, not theirs, so the
+    // message says so in one sentence and the English belongs in the details
+    // pane with every other line the compiler printed.
     if code != Some(0) || !obj.exists() {
-        return Err(EfError::Other(format!(
-            "could not build the part that keeps the window open:\n{text}"
-        )));
+        return Ok((None, text));
     }
-    Ok(obj)
+    Ok((Some(obj), text))
 }
 
 fn cancelled(diagnostics: Vec<Diagnostic>, raw: String) -> BuildOutcome {
