@@ -17,5 +17,6 @@ pub mod paths;
 pub mod project;
 pub mod text;
 pub mod toolchain;
+pub mod update;
 
 pub use error::{EfError, Result};

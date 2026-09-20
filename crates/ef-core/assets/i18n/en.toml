@@ -129,3 +129,13 @@
 "src.what.windows_program" = "Windows program"
 "src.what.linux_program" = "Linux program"
 "src.what.fas4" = "FAS4 data file"
+
+"update.heading" = "Updates"
+"update.current" = "You have version {version}."
+"update.check_now" = "Check now"
+"update.checking" = "Checking…"
+"update.up_to_date" = "This is the latest version."
+"update.available" = "Version {version} is available."
+"update.download" = "Open the download page"
+"update.download_hint" = "Download the installer and run it. It replaces this version and keeps your programs."
+"update.failed" = "Could not check: {reason}"

@@ -18,6 +18,7 @@ use ef_core::text;
 use ef_core::toolchain::manifest::{Manifest, VerifyReport};
 use ef_core::toolchain::Toolchain;
 use ef_core::tr;
+use ef_core::update;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -52,6 +53,16 @@ enum ToolchainState {
     Missing(String),
 }
 
+/// The result of asking GitHub, or why we could not ask.
+type Checked = Result<update::Status, String>;
+
+enum UpdateState {
+    /// Never asked this run.
+    Idle,
+    Checking(Receiver<Checked>),
+    Done(Checked),
+}
+
 enum BuildState {
     Idle,
     Running {
@@ -69,6 +80,8 @@ pub struct App {
     selected: Option<usize>,
     statuses: Vec<FileStatus>,
     lib_statuses: Vec<FileStatus>,
+
+    update: UpdateState,
 
     screen: Screen,
     bottom: BottomTab,
@@ -171,6 +184,7 @@ impl App {
             bottom: BottomTab::Messages,
             help_topic: 0,
             toolchain: ToolchainState::Discovering(rx),
+            update: UpdateState::Idle,
             build: BuildState::Idle,
             saved_to: None,
             diagnostics: Vec::new(),
@@ -179,6 +193,14 @@ impl App {
             save_due: None,
         };
         app.refresh_statuses();
+        // The setting has said "Check for updates automatically" since before
+        // anything checked anything; this is what makes that true. One request,
+        // on a background thread, at launch. Failure is silent: someone who
+        // opened this to compile a program does not need to hear that GitHub was
+        // unreachable.
+        if app.settings.check_updates {
+            app.check_for_updates();
+        }
         app
     }
 
@@ -373,9 +395,35 @@ impl App {
         }
     }
 
+    // -------------------------------------------------------------- updates
+
+    /// Ask GitHub whether there is a newer release, on a thread of its own.
+    ///
+    /// Never blocks the interface: the window keeps drawing, and the answer
+    /// arrives through the same kind of channel the build already uses. If it is
+    /// already asking, asking again does nothing.
+    fn check_for_updates(&mut self) {
+        if matches!(self.update, UpdateState::Checking(_)) {
+            return;
+        }
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        std::thread::spawn(move || {
+            let answer = update::check(env!("CARGO_PKG_VERSION")).map_err(|e| e.to_string());
+            let _ = tx.send(answer);
+        });
+        self.update = UpdateState::Checking(rx);
+    }
+
     // --------------------------------------------------------------- pumps
 
     fn pump(&mut self, ctx: &egui::Context) {
+        if let UpdateState::Checking(rx) = &self.update {
+            if let Ok(answer) = rx.try_recv() {
+                self.update = UpdateState::Done(answer);
+                ctx.request_repaint();
+            }
+        }
+
         // Toolchain discovery
         if let ToolchainState::Discovering(rx) = &self.toolchain {
             if let Ok(result) = rx.try_recv() {
@@ -1338,6 +1386,69 @@ impl App {
                     self.mark_dirty();
                 }
             });
+
+            ui.add_space(16.0);
+            ui.separator();
+            ui.add_space(10.0);
+            ui.label(egui::RichText::new(tr!(lang, "update.heading")).strong());
+            ui.label(
+                egui::RichText::new(tr!(
+                    lang,
+                    "update.current",
+                    version = env!("CARGO_PKG_VERSION")
+                ))
+                .small()
+                .weak(),
+            );
+            ui.add_space(6.0);
+
+            ui.horizontal(|ui| {
+                let busy = matches!(self.update, UpdateState::Checking(_));
+                if ui
+                    .add_enabled(!busy, egui::Button::new(tr!(lang, "update.check_now")))
+                    .clicked()
+                {
+                    self.check_for_updates();
+                }
+                match &self.update {
+                    UpdateState::Idle => {}
+                    UpdateState::Checking(_) => {
+                        ui.spinner();
+                        ui.label(tr!(lang, "update.checking"));
+                    }
+                    UpdateState::Done(Ok(update::Status::UpToDate)) => {
+                        ui.colored_label(theme::success_color(ui), tr!(lang, "update.up_to_date"));
+                    }
+                    UpdateState::Done(Ok(update::Status::Available { version })) => {
+                        ui.label(
+                            egui::RichText::new(tr!(lang, "update.available", version = version))
+                                .strong(),
+                        );
+                    }
+                    UpdateState::Done(Err(e)) => {
+                        ui.label(
+                            egui::RichText::new(tr!(lang, "update.failed", reason = e))
+                                .small()
+                                .weak(),
+                        );
+                    }
+                }
+            });
+
+            // The download is a separate, deliberate press, and it opens the
+            // release page rather than replacing anything behind his back: the
+            // installer he runs is the same one he installed with.
+            if let UpdateState::Done(Ok(update::Status::Available { .. })) = &self.update {
+                ui.add_space(6.0);
+                if ui.button(tr!(lang, "update.download")).clicked() {
+                    let _ = opener::open_browser(update::releases_page());
+                }
+                ui.label(
+                    egui::RichText::new(tr!(lang, "update.download_hint"))
+                        .small()
+                        .weak(),
+                );
+            }
 
             ui.add_space(10.0);
             if ui

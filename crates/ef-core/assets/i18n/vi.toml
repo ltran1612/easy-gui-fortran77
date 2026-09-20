@@ -129,3 +129,13 @@
 "src.what.windows_program" = "chương trình Windows"
 "src.what.linux_program" = "chương trình Linux"
 "src.what.fas4" = "tệp dữ liệu FAS4"
+
+"update.heading" = "Cập nhật"
+"update.current" = "Bạn đang dùng phiên bản {version}."
+"update.check_now" = "Kiểm tra ngay"
+"update.checking" = "Đang kiểm tra…"
+"update.up_to_date" = "Đây là phiên bản mới nhất."
+"update.available" = "Đã có phiên bản {version}."
+"update.download" = "Mở trang tải về"
+"update.download_hint" = "Hãy tải tệp cài đặt về và chạy nó. Tệp này sẽ thay thế phiên bản hiện tại và giữ nguyên các chương trình của bạn."
+"update.failed" = "Không kiểm tra được: {reason}"

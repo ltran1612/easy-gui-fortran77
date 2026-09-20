@@ -24,6 +24,7 @@ sha2 = "0.10"
 unicode-normalization = "0.1.25"
 encoding_rs = "0.8"
 opener = "0.7"
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 thiserror = "1"
 anyhow = "1"
 sys-locale = "0.3"
