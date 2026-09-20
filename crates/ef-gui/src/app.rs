@@ -1218,6 +1218,13 @@ impl App {
                 changed |= ui
                     .checkbox(&mut o.strip_symbols, tr!(lang, "options.strip"))
                     .changed();
+                changed |= ui
+                    .checkbox(
+                        &mut o.keep_window_open,
+                        tr!(lang, "options.keep_window_open"),
+                    )
+                    .on_hover_text(tr!(lang, "options.keep_window_open_hint"))
+                    .changed();
                 ui.horizontal(|ui| {
                     ui.label(tr!(lang, "options.opt"));
                     for (lvl, name) in [

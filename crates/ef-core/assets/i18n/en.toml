@@ -142,3 +142,5 @@
 "settings.create_launcher" = "Also create a file to run the program"
 "settings.create_launcher_hint" = "Saves a small .BAT beside the program. Double-click that instead, and the window stays open so you can read the results."
 "build.saved_with_launcher" = "Saved to {path}, together with a .BAT file to run it."
+"options.keep_window_open" = "Wait for a key before the window closes"
+"options.keep_window_open_hint" = "Windows only. The program waits for Enter when you double-click it, so you can read the results. Run from a Command Prompt or a .BAT it does not wait."

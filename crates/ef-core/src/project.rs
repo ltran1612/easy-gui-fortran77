@@ -92,6 +92,11 @@ pub struct BuildOptions {
     pub default_real8: bool,
     /// Large local arrays overflow the 1 MB Windows stack.
     pub big_stack: bool,
+    /// Link a small shim that waits for a key before the program exits, so a
+    /// console window opened by double-clicking does not vanish before it can be
+    /// read. Windows only, and off by default: it changes the link line, and a
+    /// program run from a script must never wait for a key.
+    pub keep_window_open: bool,
     /// `-s`: drop the symbol table and debug information from the linked
     /// program. Makes the saved file substantially smaller, at the cost of
     /// meaningful locations in a runtime backtrace. Off by default: a smaller
@@ -113,6 +118,7 @@ impl Default for BuildOptions {
             default_real8: false,
             big_stack: false,
             strip_symbols: false,
+            keep_window_open: false,
             opt_level: OptLevel::O1,
             preprocess: Preprocess::Never,
             extra_flags: Vec::new(),

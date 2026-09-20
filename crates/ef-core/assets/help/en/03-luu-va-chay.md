@@ -26,6 +26,14 @@ asks for it.
 
 If you would rather not have that file, turn the option off in **Settings**.
 
+### Or: let the program wait by itself
+
+**Advanced options** has **Wait for a key before the window closes**. Turn it on
+and the `.EXE` itself waits for Enter, so there is one file and no `.BAT` at all.
+
+It only waits when you double-click it. Started from a Command Prompt or from
+another `.BAT`, it finishes and exits as usual.
+
 ### The other way: open a Command Prompt in the folder
 
 1. Open the folder where you saved the program.

@@ -135,6 +135,31 @@ pub fn compile_args(
     a
 }
 
+/// Arguments to compile the pause shim.
+///
+/// Deliberately not `compile_args`: the shim is ours, written in free-form
+/// modern Fortran, and must not inherit the legacy dialect flags their code
+/// needs — `-std=legacy` and `-ffixed-form` would reject it on sight.
+pub fn shim_compile_args(
+    bundle_flags: &[OsString],
+    src: &Path,
+    obj: &Path,
+    layout: &WorkLayout,
+) -> Vec<OsString> {
+    let mut a: Vec<OsString> = Vec::new();
+    a.extend(bundle_flags.iter().cloned());
+    a.push("-c".into());
+    a.push("-ffree-form".into());
+    a.push("-O1".into());
+    a.push("-fdiagnostics-color=never".into());
+    a.push("-J".into());
+    a.push(rel(layout, &layout.module()));
+    a.push(rel(layout, src));
+    a.push("-o".into());
+    a.push(rel(layout, obj));
+    a
+}
+
 /// Arguments to link the objects into the final executable.
 ///
 /// `libs` are their own pre-compiled libraries, and they go **after** every object
@@ -176,6 +201,12 @@ pub fn link_args(
     if opts.big_stack {
         // Raise the Windows stack reservation for programs with large local arrays.
         a.push("-Wl,--stack,16777216".into());
+    }
+    if opts.keep_window_open && exe_suffix.eq_ignore_ascii_case(".exe") {
+        // Routes every call to exit() through the shim's __wrap_exit. Without
+        // this flag the shim object is linked and never reached, which is what
+        // makes the option safe to leave in the link line.
+        a.push("-Wl,--wrap=exit".into());
     }
     if opts.strip_symbols && caps.strip {
         // A statically linked Fortran program carries a lot of symbol table and
@@ -490,6 +521,80 @@ mod tests {
             !a.iter().any(|s| s.contains("lib") && s.starts_with('.')),
             "nothing from the lib directory should appear: {a:?}"
         );
+    }
+
+    #[test]
+    fn the_window_option_is_off_and_changes_nothing_unless_asked_for() {
+        // The overwhelmingly common case. An option that alters the link line
+        // by default would put a wrap on every program anyone ever builds.
+        let layout = WorkLayout::new(PathBuf::from("/work/build-1"));
+        let a = strings(&link_args(
+            &FlagCapabilities::optimistic(),
+            &[],
+            &BuildOptions::default(),
+            &[],
+            &[],
+            &layout,
+            ".exe",
+        ));
+        assert!(!a.iter().any(|s| s.contains("--wrap")), "{a:?}");
+    }
+
+    #[test]
+    fn asking_for_it_wraps_exit_on_windows_only() {
+        let layout = WorkLayout::new(PathBuf::from("/work/build-1"));
+        let o = BuildOptions {
+            keep_window_open: true,
+            ..Default::default()
+        };
+        let win = strings(&link_args(
+            &FlagCapabilities::optimistic(),
+            &[],
+            &o,
+            &[],
+            &[],
+            &layout,
+            ".exe",
+        ));
+        assert!(win.contains(&"-Wl,--wrap=exit".to_string()), "{win:?}");
+
+        // Everywhere else the program is started from a terminal that stays put,
+        // so there is nothing to keep open and nothing to wrap.
+        let nix = strings(&link_args(
+            &FlagCapabilities::optimistic(),
+            &[],
+            &o,
+            &[],
+            &[],
+            &layout,
+            "",
+        ));
+        assert!(!nix.iter().any(|s| s.contains("--wrap")), "{nix:?}");
+    }
+
+    #[test]
+    fn the_shim_is_compiled_with_its_own_dialect_not_theirs() {
+        // It is modern free-form Fortran; -std=legacy and -ffixed-form would
+        // reject it, and their code needs both.
+        let layout = WorkLayout::new(PathBuf::from("/work/build-1"));
+        let a = strings(&shim_compile_args(
+            &[],
+            &layout.src().join("shim.f90"),
+            &layout.obj().join("shim.o"),
+            &layout,
+        ));
+        assert!(a.contains(&"-ffree-form".to_string()));
+        for theirs in [
+            "-std=legacy",
+            "-ffixed-form",
+            "-fdec",
+            "-ffixed-line-length-72",
+        ] {
+            assert!(
+                !a.contains(&theirs.to_string()),
+                "{theirs} leaked into the shim"
+            );
+        }
     }
 
     #[test]

@@ -216,7 +216,14 @@ fn build_inner(
     }
 
     emit(tx, BuildEvent::Phase(BuildPhase::Linking));
-    let objs: Vec<PathBuf> = staging.sources.iter().map(|s| s.obj.clone()).collect();
+    let mut objs: Vec<PathBuf> = staging.sources.iter().map(|s| s.obj.clone()).collect();
+
+    // The pause shim, when asked for. Windows only: a console window closing on
+    // exit is a Windows behaviour, and everywhere else the program was started
+    // from a terminal that stays put by itself.
+    if program.options.keep_window_open && toolchain.exe_suffix().eq_ignore_ascii_case(".exe") {
+        objs.push(compile_pause_shim(guard, toolchain, layout, cancel)?);
+    }
     let mut cmd = toolchain.command(layout);
     cmd.args(args::link_args(
         caps,
@@ -256,6 +263,40 @@ fn build_inner(
         internal_error: None,
         file_problem: None,
     })
+}
+
+/// Build the object that keeps the console window open.
+///
+/// Its source is ours and ships inside the application, so there is nothing to
+/// install and nothing of theirs to change. A failure here fails the build
+/// rather than quietly dropping the option: they asked for the window to stay,
+/// and a program that closed anyway would look like the setting did nothing.
+fn compile_pause_shim(
+    guard: &FsGuard,
+    toolchain: &Toolchain,
+    layout: &WorkLayout,
+    cancel: &AtomicBool,
+) -> Result<PathBuf> {
+    const SHIM: &str = include_str!("../../assets/pause-shim.f90");
+
+    let src = layout.src().join("ef77_pause_shim.f90");
+    let obj = layout.obj().join("ef77_pause_shim.o");
+    guard.write_file(&src, SHIM.as_bytes())?;
+
+    let mut cmd = toolchain.command(layout);
+    cmd.args(args::shim_compile_args(
+        toolchain.compile_flags(),
+        &src,
+        &obj,
+        layout,
+    ));
+    let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
+    if code != Some(0) || !obj.exists() {
+        return Err(EfError::Other(format!(
+            "could not build the part that keeps the window open:\n{text}"
+        )));
+    }
+    Ok(obj)
 }
 
 fn cancelled(diagnostics: Vec<Diagnostic>, raw: String) -> BuildOutcome {

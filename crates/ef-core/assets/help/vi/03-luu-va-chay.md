@@ -26,6 +26,15 @@ chương trình chạy xong, và bạn nhập được số liệu khi chương 
 
 Nếu bạn không muốn tạo tệp này, hãy tắt tuỳ chọn trong **Cài đặt**.
 
+### Hoặc: để chính chương trình tự chờ
+
+Trong **Tuỳ chọn nâng cao** có mục **Chờ nhấn phím trước khi đóng cửa sổ**. Bật
+nó lên thì chính tệp `.EXE` sẽ chờ bạn nhấn Enter, nên bạn chỉ cần một tệp duy
+nhất, không cần tệp `.BAT` nữa.
+
+Chương trình chỉ chờ khi bạn bấm đúp vào nó. Nếu chạy từ Command Prompt hoặc từ
+một tệp `.BAT` khác thì nó chạy xong là xong, không chờ gì cả.
+
 ### Cách khác: mở Command Prompt trong thư mục chứa chương trình
 
 1. Mở thư mục bạn vừa lưu chương trình.
