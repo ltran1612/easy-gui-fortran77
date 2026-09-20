@@ -6,7 +6,8 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 /// Reverse-DNS qualifier. Changing this moves every user's saved data, so it is
-/// fixed for the life of the product. See "Open items" in the plan.
+/// fixed for the life of the product: changing it strands every saved setting
+/// and program list in a directory the application no longer looks in.
 pub const QUALIFIER: &str = "io.github";
 pub const ORGANIZATION: &str = "easy-fortran-77";
 pub const APPLICATION: &str = "Easy Fortran 77";

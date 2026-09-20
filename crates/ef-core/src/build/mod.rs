@@ -218,10 +218,7 @@ fn build_inner(
     emit(tx, BuildEvent::Phase(BuildPhase::Linking));
     let mut objs: Vec<PathBuf> = staging.sources.iter().map(|s| s.obj.clone()).collect();
 
-    // The pause shim, when asked for. Windows only: a console window closing on
-    // exit is a Windows behaviour, and everywhere else the program was started
-    // from a terminal that stays put by itself.
-    if program.options.keep_window_open && toolchain.exe_suffix().eq_ignore_ascii_case(".exe") {
+    if program.options.wants_pause_shim(toolchain.exe_suffix()) {
         objs.push(compile_pause_shim(guard, toolchain, layout, cancel)?);
     }
     let mut cmd = toolchain.command(layout);
@@ -265,6 +262,13 @@ fn build_inner(
     })
 }
 
+/// The shim's source, exposed so a test can compile it.
+///
+/// It is Fortran inside a Rust crate, so nothing about it is checked by building
+/// this crate: a typo in the `bind(C)` interface compiles fine here and fails at
+/// the user, at link time, on Windows only.
+pub const PAUSE_SHIM: &str = include_str!("../../assets/pause-shim.f90");
+
 /// Build the object that keeps the console window open.
 ///
 /// Its source is ours and ships inside the application, so there is nothing to
@@ -277,11 +281,9 @@ fn compile_pause_shim(
     layout: &WorkLayout,
     cancel: &AtomicBool,
 ) -> Result<PathBuf> {
-    const SHIM: &str = include_str!("../../assets/pause-shim.f90");
-
     let src = layout.src().join("ef77_pause_shim.f90");
     let obj = layout.obj().join("ef77_pause_shim.o");
-    guard.write_file(&src, SHIM.as_bytes())?;
+    guard.write_file(&src, PAUSE_SHIM.as_bytes())?;
 
     let mut cmd = toolchain.command(layout);
     cmd.args(args::shim_compile_args(

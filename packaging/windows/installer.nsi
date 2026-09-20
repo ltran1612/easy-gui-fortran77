@@ -121,11 +121,10 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir /r "$INSTDIR\toolchain"
   RMDir /r "$INSTDIR\LICENSES"
-  ; The examples ship with the application, so they go with it. The RMDir below
-  ; is deliberately non-recursive -- it removes the directory only when nothing
-  ; is left in it -- so anything installed here has to be named above or the
-  ; install directory survives the uninstall.
   RMDir /r "$INSTDIR\examples"
+  ; Non-recursive on purpose: it removes the directory only once nothing is left
+  ; in it. So everything installed has to be named above, or this quietly fails
+  ; and the install directory survives the uninstall.
   RMDir "$INSTDIR"
 
   DeleteRegKey HKCU "${REGKEY}"

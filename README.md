@@ -105,14 +105,15 @@ of things that look wrong and are not.
 
 ## What it does and does not do
 
-It **builds**. It does not run your program — that is yours to do, and the guide
-explains how (a console program double-clicked from Explorer flashes and closes,
-so it tells you to open a Command Prompt or use a small `.bat` file).
+It **builds**. It does not run your program — that is yours to do. A console
+program double-clicked from Explorer flashes and closes before it can be read, so
+saving also writes a `.BAT` beside it that waits; an option builds that waiting
+into the `.EXE` itself, for when the program travels without its sibling.
 
 The build happens in a temporary working folder, so **Save the program…** is how
-you end up with something you keep. That save is the one and only place the
-application writes outside its own data directory, it only ever copies something it
-built, and it refuses to write over anything that looks like a source file.
+you end up with something you keep. Those two files are the only things the
+application ever writes outside its own data directory. It copies only what it
+built, and refuses to write over anything that looks like a source file.
 
 ## Six things that bite, and what is done about them
 

@@ -84,6 +84,23 @@ Two modules are exempt from one rule each, and the exemption is the point:
 `fs_guard.rs` from the filesystem rule, `launcher.rs` from the shell rule. The
 place that owns a hazard is the place allowed to name it.
 
+## Embedded and generated things, and what pins each
+
+Several assets live inside the binary or are derived from something else. Each
+one has a source of truth and a check that fails when they disagree. Adding a new
+asset means adding a row here and the check that earns it — the shim sat
+unguarded for a release because it was added without one.
+
+| Asset | Source of truth | What pins it |
+|---|---|---|
+| `assets/i18n/{vi,en}.toml` | each other | key parity test, plus `check-hygiene` over every `tr!` site |
+| `assets/help/{vi,en}/*.md` | each other | topic-id parity test |
+| `assets/pause-shim.f90` | itself (Fortran) | `tests/shim.rs` compiles it and checks the symbols the link flag needs |
+| `assets/toolchain-manifest.txt` | the fetched bundle | `check-hygiene` keeps the committed copy a placeholder; `ef-cli doctor` verifies the real one |
+| `packaging/windows/icon.ico`, `assets/icon-128.png` | `logo.png` | `check-hygiene` regenerates and byte-compares |
+| `examples/` | `examples/DOC-TRUOC.txt` | `tests/examples.rs` builds and runs each, and checks the guide names them |
+| `ef-testkit/corpus/` | each case's `expect.toml` | `tests/corpus.rs` |
+
 ## Tests
 
 | Tier | Needs | Where |

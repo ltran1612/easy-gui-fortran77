@@ -107,6 +107,21 @@ pub struct BuildOptions {
     pub extra_flags: Vec<String>,
 }
 
+impl BuildOptions {
+    /// Should this build carry the shim that waits before the window closes?
+    ///
+    /// One predicate, because two places act on the answer — `build` compiles
+    /// the shim object, `args` emits the `-Wl,--wrap=exit` that reaches it — and
+    /// they have to agree. Disagreeing is silent either way: a shim nothing
+    /// calls, or a wrap with nothing behind it.
+    ///
+    /// Gated on the *toolchain's* suffix rather than the host, so a Windows
+    /// program cross-built from Linux still gets it.
+    pub fn wants_pause_shim(&self, exe_suffix: &str) -> bool {
+        self.keep_window_open && exe_suffix.eq_ignore_ascii_case(".exe")
+    }
+}
+
 impl Default for BuildOptions {
     fn default() -> Self {
         Self {

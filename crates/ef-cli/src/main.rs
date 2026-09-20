@@ -269,12 +269,8 @@ fn program_from(o: &Opts) -> Result<Program> {
     if o.preprocess {
         p.options.preprocess = Preprocess::Always;
     }
-    if o.strip {
-        p.options.strip_symbols = true;
-    }
-    if o.keep_open {
-        p.options.keep_window_open = true;
-    }
+    p.options.strip_symbols = o.strip;
+    p.options.keep_window_open = o.keep_open;
     for l in &o.libs {
         p.add_library(l)
             .with_context(|| format!("adding library {}", l.display()))?;

@@ -198,24 +198,13 @@ impl FsGuard {
         Ok(out)
     }
 
-    /// Copy a built executable to a destination the user chose himself.
+    /// The rules every write outside the data root must pass: not a folder, not
+    /// through a symlink, not over anything that looks like source. Creates the
+    /// parent if it is missing.
     ///
-    /// This is the **one** place the application writes outside its own data
-    /// directory, and it is deliberate: the whole point of the tool is to hand the user
-    /// a program the user can keep. Two rules keep it honest:
-    ///
-    /// * the source must be inside our work tree — we only ever export something
-    ///   we built, never copy one of the user's files somewhere else;
-    /// * the destination comes from a save dialog, so the user named it. Nothing is
-    ///   written anywhere the user did not point at.
-    ///
-    /// It refuses to overwrite one of the user's source files, which no save dialog
-    /// should produce but which would be unrecoverable if it ever did.
-    /// The checks every write outside the data root must pass.
-    ///
-    /// Saving is the one place this application writes where the user pointed
-    /// rather than where it owns, so the rules are the same whether what lands
-    /// there is the program or the little script that starts it.
+    /// Shared, because saving is the one moment this application writes where
+    /// the user pointed rather than where it owns, and both things that land
+    /// there — the program and the script that starts it — deserve the same care.
     fn check_export_destination(to: &Path) -> Result<()> {
         if to.is_dir() {
             return Err(EfError::Other(format!(
@@ -258,31 +247,23 @@ impl FsGuard {
     pub fn export_launcher(&self, to: &Path, text: &str) -> Result<()> {
         Self::check_export_destination(to)?;
         fs::write(to, text).map_err(|e| EfError::io(to, e))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(md) = fs::metadata(to) {
-                let mut perms = md.permissions();
-                perms.set_mode(perms.mode() | 0o111);
-                let _ = fs::set_permissions(to, perms);
-            }
-        }
+        make_runnable(to);
         Ok(())
     }
 
+    /// Copy a built program to a destination the user chose.
+    ///
+    /// This and `export_launcher` are the only two places the application writes
+    /// outside its own data directory, and both are deliberate: the point of the
+    /// tool is to hand back something to keep. What keeps it honest is that
+    /// `from` must be inside our work tree — we export only what we built, never
+    /// copy one of the user's own files somewhere else — and that `to` came from
+    /// a save dialog, so nothing lands anywhere unnamed.
     pub fn export_built_program(&self, from: &Path, to: &Path) -> Result<()> {
         self.assert_under_write_root(from)?;
         Self::check_export_destination(to)?;
         fs::copy(from, to).map_err(|e| EfError::io(to, e))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(md) = fs::metadata(to) {
-                let mut perms = md.permissions();
-                perms.set_mode(perms.mode() | 0o111);
-                let _ = fs::set_permissions(to, perms);
-            }
-        }
+        make_runnable(to);
         Ok(())
     }
 
@@ -350,6 +331,25 @@ impl Scratch {
 /// lists would disagree the first time either grew.
 pub const FORTRAN_EXTENSIONS: &[&str] =
     &["f", "for", "f77", "ftn", "fi", "inc", "f90", "f95", "fpp"];
+
+/// Add the executable bit, where there is one to add.
+///
+/// Best effort on purpose: a saved program that is readable but not marked
+/// executable is a nuisance the user can fix, and not a reason to fail a save
+/// that has already written the file.
+fn make_runnable(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(md) = fs::metadata(path) {
+            let mut perms = md.permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
 
 fn is_fortran_source(p: &Path) -> bool {
     p.extension()

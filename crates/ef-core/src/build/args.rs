@@ -202,10 +202,8 @@ pub fn link_args(
         // Raise the Windows stack reservation for programs with large local arrays.
         a.push("-Wl,--stack,16777216".into());
     }
-    if opts.keep_window_open && exe_suffix.eq_ignore_ascii_case(".exe") {
-        // Routes every call to exit() through the shim's __wrap_exit. Without
-        // this flag the shim object is linked and never reached, which is what
-        // makes the option safe to leave in the link line.
+    if opts.wants_pause_shim(exe_suffix) {
+        // Routes every call to exit() through the shim's __wrap_exit.
         a.push("-Wl,--wrap=exit".into());
     }
     if opts.strip_symbols && caps.strip {

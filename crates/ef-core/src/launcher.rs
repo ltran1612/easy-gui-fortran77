@@ -41,10 +41,12 @@ read -r _\n";
 
 /// Where the launcher goes and what is in it, for a program saved at `exe`.
 ///
-/// Returns `None` when there is nothing sensible to write — a destination with
-/// no file name at all.
+/// `None` when the script would land on the program itself — which also covers
+/// a path with no file name, since `set_extension` leaves those unchanged.
+///
+/// See also `assets/pause-shim.f90`, which solves the same problem one layer
+/// down for a program that has travelled away from this script.
 pub fn beside(exe: &Path, windows: bool) -> Option<(PathBuf, &'static str)> {
-    exe.file_name()?;
     let path = exe.with_extension(if windows { "bat" } else { "sh" });
     // `with_extension` on a name that already ends in the launcher suffix would
     // hand back the same path and the script would overwrite the program.

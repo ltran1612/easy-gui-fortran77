@@ -1,5 +1,10 @@
 ! Keep the console window open when the program is double-clicked.
 !
+! The other half of this is `src/launcher.rs`, which writes a .BAT beside the
+! saved program. That one always works and needs no build option; this one
+! covers the case it cannot — an .EXE emailed or copied somewhere without its
+! sibling script.
+!
 ! A Fortran program launched from Explorer gets a console of its own, and
 ! Windows destroys that console the moment the program exits -- too fast to read
 ! anything. This waits first.

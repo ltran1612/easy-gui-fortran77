@@ -1,4 +1,18 @@
-//! The application window.
+//! The application window: every screen, and the state behind them.
+//!
+//! This file holds no logic of its own. It owns interface state — which screen
+//! is showing (`Screen`), which bottom tab (`BottomTab`), whether a toolchain
+//! has been found yet (`ToolchainState`), whether a build is running
+//! (`BuildState`) — and it turns clicks into calls on `ef-core`.
+//!
+//! The traffic is one-way. Anything slow happens on a thread and reports back
+//! through a `crossbeam_channel::Receiver` that `pump` drains once per frame, so
+//! the window keeps drawing while a build, a toolchain probe or an update check
+//! is in flight. Nothing here blocks.
+//!
+//! Two rules, both enforced by `cargo xtask check-hygiene`: this crate may not
+//! touch the filesystem (that is `fs_guard`) and may not spawn a process (that
+//! is `build::exec`). Every user-visible string goes through `tr!`.
 
 use crate::{markdown, theme};
 use crossbeam_channel::Receiver;
