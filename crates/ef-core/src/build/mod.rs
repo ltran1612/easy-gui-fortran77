@@ -284,20 +284,13 @@ fn compile_pause_shim(
 ) -> Result<PathBuf> {
     let obj = layout.obj().join("ef77_pause_shim.o");
 
-    // Compiling it costs about as much as compiling one of the user's own
-    // files, and it produces the same bytes every time: the source is baked in
-    // with `include_str!`, so only the toolchain can change the answer. Keep it
-    // for the session and key it on the toolchain, which is what a settings
-    // change can swap underneath us.
-    let cache = shim_cache_path(toolchain, layout);
-    if let Some(cached) = cache
-        .as_ref()
-        .and_then(|c| guard.read_app_file(c).ok().flatten())
-    {
-        guard.write_file(&obj, &cached)?;
-        return Ok(obj);
-    }
-
+    // Compiled every time, deliberately. It produces the same bytes on every
+    // run -- the source is baked in with `include_str!` -- so it is cacheable,
+    // and it was cached for a while. Keeping it meant a cache path, a key, an
+    // invalidation rule and two tests, to save about what compiling one of the
+    // user's own files costs on a build that already takes half a second. The
+    // build tree is scratch space that is thrown away; this is a build step
+    // like any other, and it stays one.
     let src = layout.src().join("ef77_pause_shim.f90");
     guard.write_file(&src, PAUSE_SHIM.as_bytes())?;
 
@@ -315,24 +308,7 @@ fn compile_pause_shim(
         )));
     }
 
-    // Populated from the finished object, so a cancelled or failed compile can
-    // never leave a half-written one behind for the next build to trust.
-    if let (Some(cache), Ok(Some(bytes))) = (&cache, guard.read_app_file(&obj)) {
-        let _ = guard.write_file(cache, &bytes);
-    }
     Ok(obj)
-}
-
-/// Where this session keeps its compiled shim.
-///
-/// One level above the build directory, which by construction is the session's
-/// own tree (`build_dir` hangs each build off `session_work_dir`), so it
-/// outlives a single build and is swept with the session.
-fn shim_cache_path(toolchain: &Toolchain, layout: &WorkLayout) -> Option<PathBuf> {
-    use sha2::{Digest, Sha256};
-    let session = layout.root.parent()?;
-    let id = format!("{:x}", Sha256::digest(toolchain.id().display().as_bytes()));
-    Some(session.join(format!("pause-shim-{}.o", &id[..16])))
 }
 
 fn cancelled(diagnostics: Vec<Diagnostic>, raw: String) -> BuildOutcome {
@@ -366,78 +342,4 @@ pub fn spawn(
         build(&guard, &toolchain, &layout, &program, Some(&tx), &cancel);
     });
     rx
-}
-
-#[cfg(test)]
-mod shim_cache_tests {
-    use super::*;
-    use crate::paths::AppPaths;
-
-    /// The second build of a session must not pay for the shim again.
-    ///
-    /// Observable without a compiler: the cached path returns before it writes
-    /// the Fortran source into the build tree, so the absence of that file is
-    /// exactly the absence of a compile.
-    #[test]
-    fn the_shim_is_compiled_once_per_session_not_once_per_build() {
-        let Ok(tc) = crate::toolchain::discover(None) else {
-            eprintln!("skipping: no compiler");
-            return;
-        };
-        let tmp = tempfile::tempdir().unwrap();
-        let paths = AppPaths::under(tmp.path().join("app"));
-        let guard = FsGuard::new(paths.write_roots().to_vec()).unwrap();
-        let cancel = AtomicBool::new(false);
-
-        let first = WorkLayout::new(paths.build_dir(1));
-        for d in first.all_dirs() {
-            guard.create_dir_all(&d).unwrap();
-        }
-        compile_pause_shim(&guard, &tc, &first, &cancel).unwrap();
-        assert!(
-            first.src().join("ef77_pause_shim.f90").is_file(),
-            "the first build should have compiled it"
-        );
-        let cache = shim_cache_path(&tc, &first).unwrap();
-        assert!(cache.is_file(), "the first build should have cached it");
-
-        let second = WorkLayout::new(paths.build_dir(2));
-        for d in second.all_dirs() {
-            guard.create_dir_all(&d).unwrap();
-        }
-        let obj = compile_pause_shim(&guard, &tc, &second, &cancel).unwrap();
-        assert!(obj.is_file(), "the second build still needs the object");
-        assert!(
-            !second.src().join("ef77_pause_shim.f90").is_file(),
-            "the second build recompiled instead of reusing the cache"
-        );
-        assert_eq!(
-            std::fs::read(&obj).unwrap(),
-            std::fs::read(&cache).unwrap(),
-            "the reused object must be the cached one"
-        );
-    }
-
-    #[test]
-    fn a_different_toolchain_does_not_reuse_the_other_ones_object() {
-        // The cache is keyed on the toolchain because settings can swap it
-        // mid-session, and an object built by one gcc has no business being
-        // linked by another.
-        let Ok(tc) = crate::toolchain::discover(None) else {
-            return;
-        };
-        let layout = WorkLayout::new(PathBuf::from("/work/session/build-1"));
-        let path = shim_cache_path(&tc, &layout).unwrap();
-        assert!(
-            path.starts_with("/work/session"),
-            "sits above the build dir"
-        );
-        assert!(
-            path.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("pause-shim-"),
-            "named for what it is"
-        );
-    }
 }
