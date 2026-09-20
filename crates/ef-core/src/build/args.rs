@@ -57,6 +57,14 @@ fn dialect_flags(opts: &BuildOptions, caps: &FlagCapabilities, out: &mut Vec<OsS
     }
     if opts.default_real8 && caps.default_real8 {
         out.push("-fdefault-real-8".into());
+        // Without this, gfortran promotes DOUBLE PRECISION too -- from eight
+        // bytes to sixteen, which is quad arithmetic done in software. An
+        // option named "use 8-byte REAL" has no business quietly changing the
+        // one part of a program that was already being careful about precision,
+        // making it slower and changing its storage size at the same time.
+        if caps.default_double8 {
+            out.push("-fdefault-double-8".into());
+        }
     }
     if caps.no_range_check {
         // Old code deliberately overflows hex/octal constants in DATA statements.
@@ -584,6 +592,49 @@ mod tests {
             "",
         ));
         assert!(!nix.iter().any(|s| s.contains("--wrap")), "{nix:?}");
+    }
+
+    #[test]
+    fn promoting_real_does_not_quietly_promote_double_precision_as_well() {
+        // `-fdefault-real-8` on its own takes DOUBLE PRECISION from eight bytes
+        // to sixteen -- quad, emulated in software. Measured on the shipped
+        // compiler: KIND 4/8 by default, 8/16 with the flag alone, 8/8 with both.
+        let (layout, src) = fixture();
+        let caps = FlagCapabilities::optimistic();
+        let o = BuildOptions {
+            default_real8: true,
+            ..Default::default()
+        };
+        let a = strings(&compile_args(&caps, &[], &o, &src, &layout, &[]));
+        assert!(a.contains(&"-fdefault-real-8".to_string()), "{a:?}");
+        assert!(
+            a.contains(&"-fdefault-double-8".to_string()),
+            "REAL must be promoted without dragging DOUBLE PRECISION to quad: {a:?}"
+        );
+
+        // Off by default, neither appears.
+        let plain = strings(&compile_args(
+            &caps,
+            &[],
+            &BuildOptions::default(),
+            &src,
+            &layout,
+            &[],
+        ));
+        assert!(
+            !plain.iter().any(|f| f.starts_with("-fdefault-")),
+            "{plain:?}"
+        );
+
+        // A compiler that knows one flag and not the other is handed only the
+        // one it knows, rather than failing the build outright.
+        let partial = FlagCapabilities {
+            default_double8: false,
+            ..FlagCapabilities::optimistic()
+        };
+        let p = strings(&compile_args(&partial, &[], &o, &src, &layout, &[]));
+        assert!(p.contains(&"-fdefault-real-8".to_string()), "{p:?}");
+        assert!(!p.contains(&"-fdefault-double-8".to_string()), "{p:?}");
     }
 
     #[test]

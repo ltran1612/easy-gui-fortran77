@@ -28,6 +28,9 @@ pub struct FlagCapabilities {
     pub diagnostics_plain: bool,
     pub max_stack_var_size: bool,
     pub default_real8: bool,
+    /// `-fdefault-double-8`: keep DOUBLE PRECISION at eight bytes when REAL is
+    /// promoted, instead of letting it become quad.
+    pub default_double8: bool,
     /// `-static`: fully static link. Usually unavailable on Linux.
     pub static_full: bool,
     /// `-static-libgfortran -static-libgcc`: the runtime only. Usually available.
@@ -54,6 +57,7 @@ impl FlagCapabilities {
             diagnostics_plain: true,
             max_stack_var_size: true,
             default_real8: true,
+            default_double8: true,
             static_full: true,
             static_runtime: true,
             strip: true,
@@ -76,6 +80,7 @@ impl FlagCapabilities {
             diagnostics_plain: false,
             max_stack_var_size: false,
             default_real8: false,
+            default_double8: false,
             static_full: false,
             static_runtime: false,
             strip: false,
@@ -102,6 +107,7 @@ const SYNTAX_FLAGS: &[(&str, FlagSetter)] = &[
     ("-fdiagnostics-color=never", |c, v| c.diagnostics_plain = v),
     ("-fmax-stack-var-size=0", |c, v| c.max_stack_var_size = v),
     ("-fdefault-real-8", |c, v| c.default_real8 = v),
+    ("-fdefault-double-8", |c, v| c.default_double8 = v),
 ];
 
 /// Probe a compiler's optional flags.

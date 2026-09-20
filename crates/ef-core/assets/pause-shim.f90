@@ -20,6 +20,14 @@ contains
   ! because someone double-clicked. Started from cmd.exe, a .bat or another
   ! program, the console already had a process in it and this is false, so a
   ! script never hangs waiting for a key nobody is there to press.
+  !
+  ! Confirmed on real Windows by double-clicking a compiled program: the window
+  ! stayed open. Worth recording, because nothing in this repository can check
+  ! it. Every test around it -- that the object links, that `__wrap_exit` is
+  ! bound, that the wrap is transparent to a program nobody double-clicked --
+  ! passes under wine, where the count this depends on does not behave as
+  ! Windows makes it behave. The one call that matters could only ever be tested
+  ! by hand, on Windows.
   logical function owns_its_console()
     integer(c_int32_t) :: procs(4), n
     interface

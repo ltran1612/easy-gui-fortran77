@@ -88,7 +88,18 @@ pub struct BuildOptions {
     pub static_storage: bool,
     /// `-fd-lines-as-code`: treat `D` in column 1 as code rather than a comment.
     pub d_lines_as_code: bool,
-    /// `-fdefault-real-8`: promote REAL. Changes numerics; opt-in only.
+    /// `-fdefault-real-8` with `-fdefault-double-8`: promote REAL from four
+    /// bytes to eight, and leave DOUBLE PRECISION at eight.
+    ///
+    /// The second half is not optional decoration. `-fdefault-real-8` alone also
+    /// promotes DOUBLE PRECISION, to sixteen bytes of software-emulated quad --
+    /// so the option would change the parts of a program that were already
+    /// precise, and slow them down, which is the opposite of what anyone turning
+    /// it on is reaching for.
+    ///
+    /// Opt-in regardless. It changes storage sizes, so unformatted files written
+    /// by an earlier build stop being readable, and `EQUIVALENCE` overlays see
+    /// different bytes.
     pub default_real8: bool,
     /// Large local arrays overflow the 1 MB Windows stack.
     pub big_stack: bool,

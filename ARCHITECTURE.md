@@ -151,7 +151,10 @@ from passing for reasons unrelated to arithmetic.
   `ViewportBuilder::with_icon` at startup.
 - **The pause shim is Windows-only, and that is not an oversight.** It stops a
   double-clicked console window vanishing (`assets/pause-shim.f90`, reached by
-  `-Wl,--wrap=exit`) and is on by default. It cannot be shared with Linux: the
+  `-Wl,--wrap=exit`) and is on by default. Its one untestable step -- whether
+  `GetConsoleProcessList` returns 1 for a double-clicked program -- was checked
+  by hand on Windows and does. Nothing here can check it: wine runs every test
+  around it and none of them exercise that. It cannot be shared with Linux: the
   constructor mechanism that would do it there does not fire on MinGW, and the
   wrap that works on MinGW does not fire on Linux. Opposite mechanisms, so the
   option is simply inert off Windows — `wants_pause_shim` gates on the
