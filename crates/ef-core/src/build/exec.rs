@@ -9,6 +9,7 @@ use std::io::{ErrorKind, Read};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Windows: do not flash a console window when a GUI process spawns a child.
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -41,11 +42,19 @@ pub fn harden(cmd: &mut Command) {
 /// build blocks until the compile would have finished by itself. Verified: a
 /// grandchild held a pipe open for its full lifetime after its parent had exited.
 ///
-/// So the whole tree goes. On unix `harden` already made the child a process
-/// group leader, so its pid negated names the group. This shells out to `kill`
-/// and `taskkill` rather than calling `killpg` or building a Job object because
-/// both of those need `unsafe`, which this workspace forbids — and the tools are
-/// part of both systems. `Command::arg` per argument, never a shell.
+/// So this tries to take the whole tree. On unix `harden` already made the child
+/// a process group leader, so its pid negated names the group; `killpg` and a
+/// Windows Job object both need `unsafe`, which this workspace forbids, so it
+/// goes through `kill` and `taskkill` instead. `Command::arg` per argument,
+/// never a shell.
+///
+/// **Best effort, and deliberately not the guarantee.** `kill` is a shell
+/// builtin as often as it is a binary, the two implementations parse a negative
+/// pid differently, and `Command::new` does not consult a shell — this worked on
+/// Fedora and did nothing at all on Ubuntu's CI runner. What makes Stop reliable
+/// is that `run_capture` stops waiting for the pipe after a cancel, whether or
+/// not this managed to kill anything. This only decides whether the compiler's
+/// orphans die now or run to completion unnoticed.
 fn stop(child: &mut Child) {
     let pid = child.id();
 
@@ -67,7 +76,14 @@ fn stop(child: &mut Child) {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     harden(&mut killer);
-    let _ = killer.status();
+    match killer.status() {
+        Ok(s) if s.success() => {}
+        // Worth a line in the log rather than silence: it is the difference
+        // between the compiler's children dying now and running to completion
+        // unnoticed, and it varies by distribution in ways that are not obvious.
+        Ok(s) => tracing::debug!("could not signal the compiler's process group: {s}"),
+        Err(e) => tracing::debug!("no way to signal the compiler's process group: {e}"),
+    }
 
     // Belt and braces: if that could not run at all, at least the driver dies.
     let _ = child.kill();
@@ -102,8 +118,10 @@ pub fn run_capture(
 
     let collected = Arc::new(Mutex::new(Vec::<u8>::new()));
     let dropped_any = Arc::new(AtomicBool::new(false));
+    let reader_done = Arc::new(AtomicBool::new(false));
     let sink = Arc::clone(&collected);
     let dropped = Arc::clone(&dropped_any);
+    let done = Arc::clone(&reader_done);
     let pump = std::thread::spawn(move || {
         let mut buf = [0u8; READ_CHUNK];
         loop {
@@ -125,6 +143,7 @@ pub fn run_capture(
                 }
             }
         }
+        done.store(true, Ordering::Relaxed);
     });
 
     let mut stopped = false;
@@ -140,15 +159,39 @@ pub fn run_capture(
         }
     };
 
+    // Waiting for the reader is right when the compiler finished on its own:
+    // EOF is coming, and joining is what guarantees none of its output is lost.
+    //
+    // After a cancel it is not. The children the compiler started may still hold
+    // the write end, in which case EOF never comes and joining here is exactly
+    // the hang the Stop button was reported as. So the wait is bounded, and on
+    // expiry the thread is left to end in its own time — it holds nothing but a
+    // pipe and a buffer, and the build has already been abandoned.
+    let finished = if stopped {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !reader_done.load(Ordering::Relaxed) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        reader_done.load(Ordering::Relaxed)
+    } else {
+        true
+    };
+
     // A panic in the pump must not become a panic here: this runs on the build
     // worker thread, and a panic there drops the channel with no `Finished`
     // event, leaving the interface showing a build that never resolves.
-    let pump_failed = pump.join().is_err();
-    let bytes = match Arc::try_unwrap(collected) {
-        // The pump has been joined, so we are the only owner and the buffer can
-        // be taken rather than copied — it may be megabytes.
-        Ok(m) => m.into_inner().unwrap_or_else(|e| e.into_inner()),
-        Err(arc) => arc.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+    let mut pump_failed = false;
+    let bytes = if finished {
+        pump_failed = pump.join().is_err();
+        match Arc::try_unwrap(collected) {
+            // Sole owner now, so the buffer is taken rather than copied — it may
+            // be megabytes.
+            Ok(m) => m.into_inner().unwrap_or_else(|e| e.into_inner()),
+            Err(arc) => arc.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        }
+    } else {
+        // Still reading, so the buffer has to be copied out from under it.
+        collected.lock().unwrap_or_else(|e| e.into_inner()).clone()
     };
 
     // Valid UTF-8 is the overwhelmingly common case and costs no copy at all.
@@ -188,13 +231,22 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
-    /// Cancelling must stop the whole tree, not just the process we spawned.
+    /// Cancelling must return promptly even when the compiler leaves children
+    /// behind.
     ///
     /// This is the Stop button. A compiler driver forks children that inherit
     /// the pipe we read, so killing only the driver leaves them holding it open
     /// and the read blocks until they finish on their own. `sh -c 'sleep 30 &
     /// wait'` is that shape in miniature: kill only the `sh` and the `sleep`
     /// keeps the pipe open for its full thirty seconds.
+    ///
+    /// Two things can save it, and the test deliberately does not care which:
+    /// killing the process group, which takes the children too, or giving up on
+    /// the pipe after a cancel. The first is best effort and does nothing on
+    /// some systems -- this test passed on Fedora and hung for the full thirty
+    /// seconds on Ubuntu's runner when only that was in place. The second always
+    /// works, which is why it is the guarantee. Measured here: 0.2s when the
+    /// group kill lands, 2.2s when it does nothing, 30s with neither.
     ///
     /// Unix only because it needs a shell that backgrounds a child; the
     /// mechanism it guards is the same on Windows, where `taskkill /T` does the
