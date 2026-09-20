@@ -1,3 +1,5 @@
+<img src="logo.png" alt="" width="96" align="right">
+
 # Easy Fortran 77
 
 A one-click Fortran 77 compiler front-end. You add your `.FOR` files, name the
