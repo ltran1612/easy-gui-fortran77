@@ -1,0 +1,7 @@
+description = "Reads until end of file -- what the 'End of input (EOF)' button is for."
+sources = ["EOFLOOP.FOR"]
+success = true
+run = true
+stdin = "1\n2\n3\n"
+exit_code = 0
+stdout_contains = ["TOTAL", "6"]

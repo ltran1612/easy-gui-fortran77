@@ -1,0 +1,6 @@
+description = "Three files compiled separately and linked, as the user's old tool did."
+sources = ["MAIN.FOR", "ADDONE.FOR", "SHOW.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["RESULT", "4"]

@@ -1,0 +1,10 @@
+description = """
+Relies on locals being static and zero-initialised, exactly as DOS-era compilers
+made them. Without -fno-automatic -finit-local-zero this prints rubbish. This is
+the single most common cause of "it gives different numbers than it did in 1987".
+"""
+sources = ["STATIC.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["CALL", "1", "2", "3"]

@@ -1,0 +1,10 @@
+description = """
+The .FOR trap. gcc treats an uppercase .FOR suffix as "fixed form, run the C
+preprocessor". This file has an apostrophe in a comment and a # in column 1, so
+it fails loudly if cpp is ever allowed near it. Staging renames it to .f.
+"""
+sources = ["SOLVER.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["cpp did not run"]

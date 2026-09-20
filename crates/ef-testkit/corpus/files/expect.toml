@@ -1,0 +1,10 @@
+description = """
+A program writing a result file with a bare name. It must land in the run
+directory -- and above all NOT next to the user's sources.
+"""
+sources = ["FILES.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["WROTE FILE"]
+creates_beside_the_program = ["KETQUA.TXT"]

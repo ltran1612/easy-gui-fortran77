@@ -1,0 +1,3 @@
+description = "An unterminated character constant -- often really a line-length problem."
+sources = ["UNTERM.FOR"]
+success = false

@@ -1,0 +1,5 @@
+description = "A misspelled variable under IMPLICIT NONE."
+sources = ["TYPO.FOR"]
+success = false
+error_contains = ["CUONT"]
+error_in_file = "TYPO.FOR"

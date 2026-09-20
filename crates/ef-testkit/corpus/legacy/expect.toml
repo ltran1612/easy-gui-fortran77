@@ -1,0 +1,9 @@
+description = """
+The five features Fortran 90 deleted. Without -std=legacy modern gfortran rejects
+these outright, and a great deal of 1980s code uses them.
+"""
+sources = ["LEGACY.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["NEGATIVE", "DONE"]

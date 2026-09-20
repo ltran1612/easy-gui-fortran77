@@ -1,0 +1,28 @@
+/target
+
+# The compiler is never in git. It is built into target/ from the pinned recipe
+# by `cargo xtask fetch-toolchain`, and published as a release artefact by CI.
+# These are here as a second line of defence: `cargo xtask check-hygiene` fails
+# the build if anything toolchain-shaped is tracked, wherever it lives.
+**/toolchain/bin/
+**/toolchain/lib/
+**/toolchain/libexec/
+**/toolchain/Library/
+*.conda
+*.exe
+*.dll
+*.so
+*.so.*
+*.a
+*.o
+*.ttf
+*.otf
+
+# Generated for one specific fetched bundle; a release regenerates it.
+/crates/ef-gui/assets/toolchain-manifest.txt
+
+**/*.rs.bk
+
+# The Windows test VM: disk images, firmware vars, ISOs and its own SSH key.
+# Scaffolding only — nothing in here is part of a release.
+/vm/

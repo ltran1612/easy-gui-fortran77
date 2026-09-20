@@ -1,0 +1,6 @@
+description = "ASCII-transliterated Vietnamese, the common case for legacy sources."
+sources = ["VIET.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["Ket qua tinh toan", "42"]

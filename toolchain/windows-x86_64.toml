@@ -1,0 +1,271 @@
+# Windows x86_64 toolchain recipe.
+#
+# conda-forge publishes a MinGW-w64/UCRT gfortran in the *same package format* as
+# the Linux one, so one fetch pipeline serves both platforms: one prune format,
+# one integrity manifest, one GPL source-mirroring job.
+#
+# The package set is the dependency closure of gfortran_impl_win-64 and
+# binutils_impl_win-64, resolved from conda-forge repodata rather than by hand.
+# Two things that closure caught which guessing did not: ld_impl_win-64 is a
+# package of its own (the same trap that cost a container test on Linux), and the
+# mingw-w64 CRT arrives via m2w64-sysroot_win-64 -> mingw-w64-ucrt-x86_64-crt-git.
+# A first attempt filtered out anything named m2w64* as MSYS2 shell tooling and
+# ended up with no crt2.o at all, which would have failed every link.
+#
+# Excluded from the closure on purpose: intel-openmp, libgomp and _openmp_mutex
+# (we never pass -fopenmp) and libstdcxx-devel_win-64 (C++ headers; no C++
+# compiler ships).
+#
+# Validation status: exercised under wine, not on Windows.
+#
+# `toolchain/verify-under-wine.sh` builds and runs the whole Fortran corpus with
+# this bundle, and all fifteen cases pass -- including static linking, stripping,
+# DEC extensions and static local storage. wine is not Windows, so that is
+# evidence rather than proof, and the windows-latest CI job remains the real gate.
+#
+# It is worth the trouble: it found two bugs the day it was set up. The build
+# looked for `program` where MinGW's linker writes `program.exe`, because the
+# suffix came from the host rather than the bundle's target; and the launcher was
+# resolved against the child's scrubbed PATH, where nothing could ever find it.
+# Both would otherwise have surfaced as a confusing CI failure at best.
+
+target = "x86_64-pc-windows-gnu"
+triplet = "x86_64-w64-mingw32"
+gcc_version = "16.2.0"
+channel = "https://conda.anaconda.org/conda-forge"
+bundle_template = "windows-x86_64.bundle.toml"
+
+[[package]]
+name = "gcc_impl_win-64"
+subdir = "win-64"
+version = "16.2.0"
+file = "gcc_impl_win-64-16.2.0-h082bef6_5.conda"
+sha256 = "51bb818c920648bc1245dae186e5d941772fe4ea171094a50b898dbd6b8b3edd"
+size = 64587844
+
+[[package]]
+name = "gfortran_impl_win-64"
+subdir = "win-64"
+version = "16.2.0"
+file = "gfortran_impl_win-64-16.2.0-h408695e_5.conda"
+sha256 = "005876098d29a7e46d3404478e7fcae7f9eb8b3f0778ea2531e0bd4464506c4b"
+size = 18108964
+
+[[package]]
+name = "libgcc-devel_win-64"
+subdir = "noarch"
+version = "16.2.0"
+file = "libgcc-devel_win-64-16.2.0-h25252f5_5.conda"
+sha256 = "8be44dc6e4dfe833dc4cdfb685dea4fb7e345e6ab9da7f9cb8b15463c99dc50f"
+size = 2498183
+
+[[package]]
+name = "binutils_impl_win-64"
+subdir = "win-64"
+version = "2.46.1"
+file = "binutils_impl_win-64-2.46.1-bootstrap_h173839c_2.conda"
+sha256 = "c1e20caac9084c846745fa27afbf5716544c6ec83e1df59be1a0ef19d591a903"
+size = 6216136
+
+[[package]]
+name = "ld_impl_win-64"
+subdir = "win-64"
+version = "2.46.1"
+file = "ld_impl_win-64-2.46.1-bootstrap_h8c62646_2.conda"
+sha256 = "d99d2a0ca417fd74d3c0e58334a2968bf2b936f7f22ac04fa9867e5307ee0a17"
+size = 895980
+
+[[package]]
+name = "m2w64-sysroot_win-64"
+subdir = "noarch"
+version = "12.0.0.r4.gg4f2fc60ca"
+file = "m2w64-sysroot_win-64-12.0.0.r4.gg4f2fc60ca-hd8ed1ab_10.conda"
+sha256 = "fb0ffe6b3c25189038c29abbd1fac2522d87fe2775a09e5f5088e5542dc3309b"
+size = 8421
+
+[[package]]
+name = "ucrt"
+subdir = "win-64"
+version = "10.0.26100.0"
+file = "ucrt-10.0.26100.0-h57928b3_0.conda"
+sha256 = "3005729dce6f3d3f5ec91dfc49fc75a0095f9cd23bab49efb899657297ac91a5"
+size = 694692
+
+[[package]]
+name = "libwinpthread"
+subdir = "win-64"
+version = "12.0.0.r4.gg4f2fc60ca"
+file = "libwinpthread-12.0.0.r4.gg4f2fc60ca-h57928b3_10.conda"
+sha256 = "0fccf2d17026255b6e10ace1f191d0a2a18f2d65088fd02430be17c701f8ffe0"
+size = 36621
+
+[[package]]
+name = "libgcc"
+subdir = "win-64"
+version = "16.2.0"
+file = "libgcc-16.2.0-h110b43a_5.conda"
+sha256 = "c21bf71a514111fa97bbdaffe479f38ae53b4125b7cb5fdebdd2d742c5e5fd3a"
+size = 825471
+
+[[package]]
+name = "libgfortran5"
+subdir = "win-64"
+version = "16.2.0"
+file = "libgfortran5-16.2.0-h7c9de5e_5.conda"
+sha256 = "f39f19bd4e44aef1a51fc941153d835900f1226ae0a3a4ff157c0d3b6720f3b9"
+size = 2815498
+
+[[package]]
+name = "libstdcxx"
+subdir = "win-64"
+version = "16.2.0"
+file = "libstdcxx-16.2.0-hae5796f_5.conda"
+sha256 = "5dcbc1e5890a432794576360e8b7aabc2685c2353267f868266c885d215a4c91"
+size = 7218977
+
+[[package]]
+name = "m2-conda-epoch"
+subdir = "win-64"
+version = "20250515"
+file = "m2-conda-epoch-20250515-0_x86_64.conda"
+sha256 = "51e9214548f177db9c3fe70424e3774c95bf19cd69e0e56e83abe2e393228ba1"
+size = 7539
+
+[[package]]
+name = "mingw-w64-ucrt-x86_64-crt-git"
+subdir = "noarch"
+version = "12.0.0.r4.gg4f2fc60ca"
+file = "mingw-w64-ucrt-x86_64-crt-git-12.0.0.r4.gg4f2fc60ca-hd8ed1ab_10.conda"
+sha256 = "de3e42149b498c16bfb485b7729f4ca0fe392be576a2a10ff702d661799b1df3"
+size = 5663635
+
+[[package]]
+name = "mingw-w64-ucrt-x86_64-headers-git"
+subdir = "noarch"
+version = "12.0.0.r4.gg4f2fc60ca"
+file = "mingw-w64-ucrt-x86_64-headers-git-12.0.0.r4.gg4f2fc60ca-hd8ed1ab_10.conda"
+sha256 = "1add86481f35163215e7076e6f06f22aa9f1f9345a5fff5cb07bc846c13fbec7"
+size = 7089846
+
+[[package]]
+name = "mingw-w64-ucrt-x86_64-windows-default-manifest"
+subdir = "noarch"
+version = "6.4"
+file = "mingw-w64-ucrt-x86_64-windows-default-manifest-6.4-he206cdd_7.conda"
+sha256 = "5b0df4e0ba8487ffd59f60c34c5dbb9e001ecd2c5d2c66ba88eada40bfa3ecb8"
+size = 7412
+
+[[package]]
+name = "mingw-w64-ucrt-x86_64-winpthreads-git"
+subdir = "noarch"
+version = "12.0.0.r4.gg4f2fc60ca"
+file = "mingw-w64-ucrt-x86_64-winpthreads-git-12.0.0.r4.gg4f2fc60ca-hd8ed1ab_10.conda"
+sha256 = "828abb111286940473c4c665fc8ab300d28920f5af83b32295e8bf2256a8f342"
+size = 123916
+
+# total download: 116.8 MB
+
+# Mirrors the Linux keep-list, adapted to the conda Windows layout: win-64
+# packages install under `Library/`, noarch ones at the root, which is why
+# `lib/gcc/...` appears twice below. The bundle descriptor passes -B for both.
+[prune]
+keep = [
+  "bundle.toml",
+
+  # driver, binutils and the DLLs they and the produced programs load
+  "Library/bin/*-gfortran.exe",
+  "Library/bin/*.dll",
+  "Library/*/bin/as.exe",
+  "Library/*/bin/ld.exe",
+
+  # the Fortran front end and the link wrapper. cc1, cc1obj, cc1objplus and lto1
+  # are ~170 MB and unreachable: f951 has an integrated preprocessor.
+  "Library/libexec/gcc/*/*/f951.exe",
+  "Library/libexec/gcc/*/*/collect2.exe",
+
+  # startup files, runtime archives, specs, intrinsic modules
+  "Library/lib/gcc/*/*/*.o",
+  "Library/lib/gcc/*/*/libgfortran.a",
+  "Library/lib/gcc/*/*/libgfortran.dll.a",
+  "Library/lib/gcc/*/*/libquadmath.a",
+  "Library/lib/gcc/*/*/libquadmath.dll.a",
+  "Library/lib/gcc/*/*/libatomic.a",
+  "Library/lib/gcc/*/*/libatomic.dll.a",
+  "Library/lib/gcc/*/*/specs",
+  "Library/lib/gcc/*/*/*.specs",
+  "Library/lib/gcc/*/*/*.spec",
+  "Library/lib/gcc/*/*/finclude/*",
+
+  # libgcc-devel is a noarch package, so it lands at the root rather than under
+  # Library/. Kept where it falls; the bundle passes -B for it.
+  "lib/gcc/*/*/*.o",
+  "lib/gcc/*/*/libgcc.a",
+  "lib/gcc/*/*/libgcc_eh.a",
+  "lib/gcc/*/*/libgcc_s.a",
+
+  # ld's linker scripts
+  "Library/*/lib/ldscripts/*",
+
+  # The mingw-w64 CRT sysroot, named file by file rather than wholesale. The
+  # directory is 82 MB, almost all of it import libraries for Windows API
+  # surfaces a Fortran program never touches (OneCore, WindowsApp, nanoserver).
+  #
+  # The first ten entries are not a guess: they are what `ld -t` reported opening
+  # across every corpus program and four link variants (static, dynamic,
+  # stripped, large-stack). The rest is margin -- everything the spec file names
+  # on a conditional path, plus the classic Win32 import libraries a legacy
+  # program might name itself through the advanced "extra flags" box. 82 MB down
+  # to 18 MB.
+  "*/sysroot/usr/lib/crt2.o",
+  "*/sysroot/usr/lib/default-manifest.o",
+  "*/sysroot/usr/lib/libadvapi32.a",
+  "*/sysroot/usr/lib/libkernel32.a",
+  "*/sysroot/usr/lib/libm.a",
+  "*/sysroot/usr/lib/libmingw32.a",
+  "*/sysroot/usr/lib/libmingwex.a",
+  "*/sysroot/usr/lib/libmsvcrt.a",
+  "*/sysroot/usr/lib/libshell32.a",
+  "*/sysroot/usr/lib/libuser32.a",
+
+  # Named by the spec file on paths our corpus does not take.
+  "*/sysroot/usr/lib/crt1.o",
+  "*/sysroot/usr/lib/dllcrt2.o",
+  "*/sysroot/usr/lib/crtbegin.o",
+  "*/sysroot/usr/lib/crtend.o",
+  "*/sysroot/usr/lib/libmingwthrd.a",
+  "*/sysroot/usr/lib/libmoldname.a",
+  "*/sysroot/usr/lib/libpthread.a",
+  "*/sysroot/usr/lib/libwinpthread.a",
+  "*/sysroot/usr/lib/libgdi32.a",
+  "*/sysroot/usr/lib/libcomdlg32.a",
+  "*/sysroot/usr/lib/libpsapi.a",
+  "*/sysroot/usr/lib/libucrt.a",
+  "*/sysroot/usr/lib/libucrtbase.a",
+  "*/sysroot/usr/lib/libmsvcrt-os.a",
+  "*/sysroot/usr/lib/libssp.a",
+
+  # A 1980s program that calls the Windows API directly names these itself.
+  "*/sysroot/usr/lib/libws2_32.a",
+  "*/sysroot/usr/lib/libole32.a",
+  "*/sysroot/usr/lib/liboleaut32.a",
+  "*/sysroot/usr/lib/libuuid.a",
+  "*/sysroot/usr/lib/libcomctl32.a",
+  "*/sysroot/usr/lib/libwinspool.a",
+  "*/sysroot/usr/lib/libodbc32.a",
+  "*/sysroot/usr/lib/libwinmm.a",
+  "*/sysroot/usr/lib/libversion.a",
+  "*/sysroot/usr/lib/libshlwapi.a",
+
+  # GPL compliance travels with the binaries
+  "Library/share/licenses/*",
+]
+
+drop = [
+  # GCC plugin support: cc1.exe.a / cc1plus.exe.a, ~70 MB
+  "*/plugin/*",
+
+  # Nothing in the toolchain imports libstdc++, verified by reading the PE import
+  # tables of the driver, f951, collect2, as and ld. No C++ is compiled either.
+  "*/libstdc++-6.dll",
+
+]

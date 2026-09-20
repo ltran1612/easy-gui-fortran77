@@ -1,0 +1,9 @@
+description = """
+Card-image source with sequence numbers in columns 73-80. This is why the default
+must stay at 72 columns: -ffixed-line-length-none would read those digits as code.
+"""
+sources = ["SEQNUM.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["7"]

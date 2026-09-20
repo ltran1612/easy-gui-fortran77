@@ -1,0 +1,9 @@
+description = """
+STRUCTURE/RECORD and dot member access: the VAX/DEC lineage inherited by
+Microsoft Fortran, Lahey, Watcom and DVF. Needs -fdec.
+"""
+sources = ["DECEXT.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["SUM", "7"]

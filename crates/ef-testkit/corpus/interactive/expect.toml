@@ -1,0 +1,11 @@
+description = """
+The prompt that must arrive before the user types. WRITE with ADVANCE='NO' emits no
+newline, so a line-oriented reader would hold it until the program exits -- and a
+program sitting on READ never exits.
+"""
+sources = ["INTER.FOR"]
+success = true
+run = true
+stdin = "21\n"
+exit_code = 0
+stdout_contains = ["Nhap so N:", "KET QUA", "42"]

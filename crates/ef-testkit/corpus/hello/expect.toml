@@ -1,0 +1,6 @@
+description = "The simplest possible program, with an uppercase .FOR name."
+sources = ["HELLO.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["Hello from Fortran 77"]

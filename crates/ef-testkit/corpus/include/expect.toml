@@ -1,0 +1,9 @@
+description = """
+INCLUDE must still resolve after the source is copied into the work tree. The
+.INC file is NOT in the source list: it is found through -I<the user's directory>.
+"""
+sources = ["MAIN.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = ["X="]

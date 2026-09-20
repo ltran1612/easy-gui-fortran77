@@ -1,0 +1,141 @@
+name: Release
+
+# Publishes the application together with its compiler. The compiler is never in
+# git: it is built here from the pinned recipe in toolchain/, which is what keeps
+# the repository small and the artefact reproducible.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (without the leading v)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  package:
+    name: Package (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            artifact: "*.tar.gz"
+          - os: windows-latest
+            target: windows-x86_64
+            artifact: "*.zip"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Order matters: the fetch writes the integrity manifest, and the build
+      # embeds it. Building first would ship a binary that cannot verify its own
+      # toolchain.
+      - name: Build the toolchain bundle from the pinned recipe
+        run: cargo xtask fetch-toolchain --target ${{ matrix.target }}
+
+      - name: Prove the bundle before shipping it
+        run: cargo test -p ef-testkit --test corpus
+        env:
+          EF77_REQUIRE_TOOLCHAIN: "1"
+          EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/${{ matrix.target }}
+
+      - name: Build the application
+        run: cargo build --release -p ef-gui
+
+      - name: Package
+        run: cargo xtask package --target ${{ matrix.target }}
+
+      - name: The packaged application must verify its own toolchain
+        shell: bash
+        run: |
+          cargo build --release -p ef-cli
+          dist=$(ls -d target/dist/EasyFortran77-*-${{ matrix.target }})
+          cp target/release/ef-cli* "$dist/" 2>/dev/null || true
+          cd "$dist" && ./ef-cli doctor | tee /dev/stderr | grep -q "integrity  : ok"
+          rm -f ef-cli ef-cli.exe
+
+      - name: Build the Windows installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          $dist = (Get-ChildItem -Directory target/dist/EasyFortran77-*-windows-x86_64)[0].FullName
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          & "$env:ProgramFiles(x86)\NSIS\makensis.exe" `
+            "/DSRC=$dist" "/DVERSION=$version" `
+            "/DOUT=$PWD\target\dist\EasyFortran77-$version-Setup.exe" `
+            packaging\windows\installer.nsi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            target/dist/${{ matrix.artifact }}
+            target/dist/*Setup.exe
+          if-no-files-found: error
+
+  corresponding-source:
+    name: Corresponding Source (GPLv3 §6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Section 6 wants the source available from the same place as the binaries,
+      # so it is published with them rather than pointed at.
+      - name: Gather it
+        run: cargo xtask fetch-sources --target linux-x86_64
+      - name: Archive
+        run: |
+          cd target/corresponding-source
+          tar czf ../dist-corresponding-source.tar.gz linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corresponding-source
+          path: target/dist-corresponding-source.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: [package, corresponding-source]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Show what is being published
+        run: find artifacts -type f -printf '%10s  %p\n' | sort -k2
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          body: |
+            ## Installing
+
+            **Windows:** download `EasyFortran77-…-Setup.exe` and run it. It installs
+            into your own user folder, so Windows will not ask for an administrator
+            password. The first time, Windows may warn that it does not recognise the
+            program — click **More info**, then **Run anyway**.
+
+            **Linux:** download the `.tar.gz`, extract it anywhere, and run
+            `easy-fortran-77`.
+
+            The compiler is inside the download. Nothing else to install.
+
+            ## Source code for the bundled compiler
+
+            `dist-corresponding-source.tar.gz` holds the source for the GNU compiler
+            shipped in these downloads, as GPLv3 section 6 requires. `SOURCES.md`
+            inside it says what covers what.
+
+            Programs you compile are yours: the GCC Runtime Library Exception places
+            no licensing requirement on them.

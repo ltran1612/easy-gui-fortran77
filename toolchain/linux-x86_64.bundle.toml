@@ -1,0 +1,28 @@
+# Written by the toolchain fetch step. Tells the application how to drive this
+# bundle: a relocatable GCC must be pointed at its own sysroot and startup files,
+# or it silently falls back to whatever the host happens to have.
+id = "conda-forge-gcc-16.2.0-glibc2.17"
+version = "16.2.0"
+gfortran = "bin/x86_64-conda-linux-gnu-gfortran"
+path_dirs = ["bin"]
+
+compile_flags = [
+  "--sysroot=${ROOT}/x86_64-conda-linux-gnu/sysroot",
+  "-B${ROOT}/bin/",
+  "-B${ROOT}/libexec/gcc/x86_64-conda-linux-gnu/16.2.0/",
+  "-B${ROOT}/lib/gcc/x86_64-conda-linux-gnu/16.2.0/",
+  "-specs=${ROOT}/lib/gcc/x86_64-conda-linux-gnu/16.2.0/builtin.specs",
+  # GCC's specs reference the LTO linker plugin, and the driver resolves that
+  # eagerly -- it fails even for -fsyntax-only. We never pass -flto, so turn the
+  # plugin off rather than carry 2.7 MB of LTO machinery that is never used.
+  "-fno-use-linker-plugin",
+]
+link_flags = [
+  "--sysroot=${ROOT}/x86_64-conda-linux-gnu/sysroot",
+  "-B${ROOT}/bin/",
+  "-B${ROOT}/libexec/gcc/x86_64-conda-linux-gnu/16.2.0/",
+  "-B${ROOT}/lib/gcc/x86_64-conda-linux-gnu/16.2.0/",
+  "-specs=${ROOT}/lib/gcc/x86_64-conda-linux-gnu/16.2.0/builtin.specs",
+  "-no-pie",
+  "-fno-use-linker-plugin",
+]

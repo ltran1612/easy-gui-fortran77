@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: Format, lints and hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets
+      # The structural safety rules, enforced rather than remembered.
+      - run: cargo xtask check-hygiene
+
+  test-linux:
+    name: Tests (Linux, real gfortran)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install a Fortran compiler
+        run: sudo apt-get update && sudo apt-get install -y gfortran
+      - run: gfortran --version
+      # Tiers 0, 1 and 2. EF77_REQUIRE_TOOLCHAIN turns a missing compiler into a
+      # failure so the corpus can never be silently skipped in CI.
+      - run: cargo test --workspace
+        env:
+          EF77_REQUIRE_TOOLCHAIN: "1"
+
+  test-windows:
+    name: Tests (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install a Fortran compiler
+        shell: pwsh
+        run: |
+          choco install mingw --no-progress -y
+          gfortran --version
+      - run: cargo test --workspace
+        env:
+          EF77_REQUIRE_TOOLCHAIN: "1"
+      - run: cargo build --release --workspace
+
+  bundled-toolchain-linux:
+    name: Bundled toolchain (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the bundle from the pinned recipe
+        run: cargo xtask fetch-toolchain --target linux-x86_64
+      # The prune is only correct if the corpus passes against the pruned tree.
+      - name: Prove the pruned bundle
+        run: cargo test -p ef-testkit --test corpus
+        env:
+          EF77_REQUIRE_TOOLCHAIN: "1"
+          EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/linux-x86_64
+      - name: The integrity manifest must match what was just built
+        run: |
+          cargo run -p ef-cli -- doctor | tee /dev/stderr | grep -q 'integrity  : ok'
+        env:
+          EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/linux-x86_64
+
+  bundled-toolchain-windows:
+    name: Bundled toolchain (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the bundle from the pinned recipe
+        run: cargo xtask fetch-toolchain --target windows-x86_64
+      # This job is what actually validates the Windows recipe. It was written on
+      # Linux, where the binaries cannot be run, so until this is green the recipe
+      # is unproven -- see the warning at the top of toolchain/windows-x86_64.toml.
+      - name: Prove the pruned bundle
+        run: cargo test -p ef-testkit --test corpus
+        env:
+          EF77_REQUIRE_TOOLCHAIN: "1"
+          EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/windows-x86_64
+      - name: The integrity manifest must match what was just built
+        shell: bash
+        run: |
+          cargo run -p ef-cli -- doctor | tee /dev/stderr | grep -q 'integrity  : ok'
+        env:
+          EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/windows-x86_64
+
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --workspace

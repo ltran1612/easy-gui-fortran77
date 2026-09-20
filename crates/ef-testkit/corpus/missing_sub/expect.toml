@@ -1,0 +1,7 @@
+description = """
+MYSUB.FOR exists in the folder but is deliberately NOT in the source list, so the
+link fails. By far the most common real mistake: a file left out of the program.
+"""
+sources = ["MAIN.FOR"]
+success = false
+undefined_symbol = true

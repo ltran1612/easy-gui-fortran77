@@ -1,0 +1,6 @@
+      PROGRAM FILEOUT
+      OPEN (UNIT=10, FILE='KETQUA.TXT', STATUS='UNKNOWN')
+      WRITE (10,*) 'RESULT 123'
+      CLOSE (10)
+      WRITE (*,*) 'WROTE FILE'
+      END

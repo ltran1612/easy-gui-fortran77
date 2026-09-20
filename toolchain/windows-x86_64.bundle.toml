@@ -1,0 +1,35 @@
+# Written by the toolchain fetch step. Tells the application how to drive this
+# bundle: a relocatable GCC must be pointed at its own sysroot and startup files,
+# or it silently falls back to whatever the host happens to have.
+#
+# Two -B entries for lib/gcc because conda splits the toolchain across two
+# prefixes on Windows: win-64 packages install under Library/, noarch ones at the
+# root, so libgcc.a and crtbegin.o end up in a different tree from libgfortran.a.
+id = "conda-forge-gcc-16.2.0-mingw-ucrt"
+version = "16.2.0"
+gfortran = "Library/bin/x86_64-w64-mingw32-gfortran.exe"
+path_dirs = ["Library/bin", "Library/x86_64-w64-mingw32/bin"]
+
+# MinGW's linker appends this whatever machine it runs on, so the build has to
+# look for it. Without it, driving this bundle from Linux reports a link failure
+# on a build that worked.
+exe_suffix = ".exe"
+
+compile_flags = [
+  "--sysroot=${ROOT}/Library/x86_64-w64-mingw32/sysroot",
+  "-B${ROOT}/Library/bin/",
+  "-B${ROOT}/Library/x86_64-w64-mingw32/bin/",
+  "-B${ROOT}/Library/libexec/gcc/x86_64-w64-mingw32/16.2.0/",
+  "-B${ROOT}/Library/lib/gcc/x86_64-w64-mingw32/16.2.0/",
+  "-B${ROOT}/lib/gcc/x86_64-w64-mingw32/16.2.0/",
+  "-fno-use-linker-plugin",
+]
+link_flags = [
+  "--sysroot=${ROOT}/Library/x86_64-w64-mingw32/sysroot",
+  "-B${ROOT}/Library/bin/",
+  "-B${ROOT}/Library/x86_64-w64-mingw32/bin/",
+  "-B${ROOT}/Library/libexec/gcc/x86_64-w64-mingw32/16.2.0/",
+  "-B${ROOT}/Library/lib/gcc/x86_64-w64-mingw32/16.2.0/",
+  "-B${ROOT}/lib/gcc/x86_64-w64-mingw32/16.2.0/",
+  "-fno-use-linker-plugin",
+]

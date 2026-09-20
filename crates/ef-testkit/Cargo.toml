@@ -1,0 +1,31 @@
+[package]
+name = "ef-testkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Fake compiler and fake interactive program, so the whole pipeline is testable with no Fortran toolchain present."
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "fake_gfortran"
+path = "src/bin/fake_gfortran.rs"
+
+[[bin]]
+name = "fake_program"
+path = "src/bin/fake_program.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ef-core.workspace = true
+crossbeam-channel.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+serde.workspace = true
+toml.workspace = true
+which.workspace = true
