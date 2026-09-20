@@ -149,14 +149,24 @@ jobs:
         run: |
           choco install nsis --no-progress -y
           $dist = (Get-ChildItem -Directory target/dist/EasyFortran77-*-windows-x86_64)[0].FullName
-          # `makensis`, not "$env:ProgramFiles(x86)\NSIS\makensis.exe": in a
-          # double-quoted PowerShell string that parses as $env:ProgramFiles
-          # followed by a literal (x86), giving "C:\Program Files(x86)\..." with
-          # no space, which does not exist. choco shims makensis onto PATH.
-          & makensis `
+
+          # Resolved explicitly. Two spellings do not work here and both fail
+          # only on the runner: "$env:ProgramFiles(x86)\NSIS\makensis.exe" ends
+          # the variable name at the paren, giving "C:\Program Files(x86)\..."
+          # with no space; and a bare `makensis` is not on PATH, because choco's
+          # nsis package installs no shim this session can see.
+          $nsis = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'),
+            (Join-Path $env:ProgramFiles 'NSIS\makensis.exe')
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $nsis) { throw "makensis.exe not found after installing nsis" }
+          Write-Host "using $nsis"
+
+          & $nsis `
             "/DSRC=$dist" "/DVERSION=${{ needs.plan.outputs.version }}" `
             "/DOUT=$PWD\target\dist\EasyFortran77-${{ needs.plan.outputs.version }}-Setup.exe" `
             packaging\windows\installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed with $LASTEXITCODE" }
 
       - uses: actions/upload-artifact@v4
         with:
