@@ -46,6 +46,47 @@ struct Violation {
     rule: &'static str,
 }
 
+/// The committed icons must be what `logo.png` produces today.
+///
+/// They are generated and committed, which is only honest if something checks
+/// them: replace the artwork, forget `cargo xtask gen-icons`, and the executable,
+/// the window, the installer and the uninstaller all go quietly stale. Nothing
+/// else would notice — CI never runs the generator, the release consumes the
+/// committed `.ico` directly, and `build.rs` watches the `.ico` rather than the
+/// logo it came from.
+///
+/// This is the same job `check_manifest_is_a_placeholder` does for the other
+/// generated artefact. Regeneration is byte-stable, so a mismatch means the
+/// source moved and the outputs did not.
+fn check_icons_match_logo(root: &Path, v: &mut Vec<Violation>) {
+    let Ok(want) = crate::icons::generate(root) else {
+        // No logo, or an unreadable one. `gen-icons` reports that properly; this
+        // check has nothing to say about it.
+        return;
+    };
+    for (path, want) in [
+        (crate::icons::ico_path(root), want.ico),
+        (crate::icons::window_png_path(root), want.window_png),
+    ] {
+        let rel = path.strip_prefix(root).unwrap_or(&path).to_path_buf();
+        match std::fs::read(&path) {
+            Ok(have) if have == want => {}
+            Ok(_) => v.push(Violation {
+                file: rel,
+                line: 0,
+                text: String::new(),
+                rule: "generated from logo.png and out of date; run `cargo xtask gen-icons`",
+            }),
+            Err(_) => v.push(Violation {
+                file: rel,
+                line: 0,
+                text: String::new(),
+                rule: "generated from logo.png and missing; run `cargo xtask gen-icons`",
+            }),
+        }
+    }
+}
+
 /// Every translation key named in the code must exist in both catalogs.
 ///
 /// `i18n::lookup` falls back to returning the key itself, so a mistyped or
@@ -169,6 +210,7 @@ fn check_hygiene() -> Result<()> {
     check_no_binaries_tracked(&root, &mut v)?;
     check_manifest_is_a_placeholder(&root, &mut v);
     check_i18n_keys(&root, &mut v)?;
+    check_icons_match_logo(&root, &mut v);
 
     for file in rust_sources(&root) {
         let rel = file.strip_prefix(&root).unwrap_or(&file).to_path_buf();

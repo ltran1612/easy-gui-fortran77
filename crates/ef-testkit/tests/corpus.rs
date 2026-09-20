@@ -385,14 +385,17 @@ fn run_built(
 
     // Through the bundle's launcher when there is one, so a Windows bundle can be
     // exercised from Linux under wine.
-    let mut child = tc
-        .run_binary(exe)
-        .current_dir(cwd)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| format!("could not start {}: {err}", exe.display()))?;
+    // Through the retry: this is the densest overlap in the suite between
+    // forking a compiler and exec'ing a binary it has just written, and it is
+    // what the release gates on.
+    let mut child = ef_testkit::spawn_tolerating_busy(
+        tc.run_binary(exe)
+            .current_dir(cwd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .map_err(|err| format!("could not start {}: {err}", exe.display()))?;
 
     if let Some(mut w) = child.stdin.take() {
         let _ = w.write_all(stdin.as_bytes());

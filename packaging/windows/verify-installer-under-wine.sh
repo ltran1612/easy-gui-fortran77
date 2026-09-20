@@ -28,7 +28,9 @@ export WINEDEBUG=-all
 [ -d "$staged" ] || { echo "no staged package; run: cargo xtask package --target windows-x86_64"; exit 1; }
 
 echo "== building the installer =="
-makensis -DSRC="$staged" -DVERSION="$version" -DOUT="$setup" packaging/windows/installer.nsi | tail -3
+makensis -DSRC="$staged" -DVERSION="$version" \
+  -DICON="$PWD/packaging/windows/icon.ico" \
+  -DOUT="$setup" packaging/windows/installer.nsi | tail -3
 ls -l "$setup" | awk '{printf "installer: %.1f MB\n", $5/1e6}'
 
 user_dir="$WINEPREFIX/drive_c/users/$USER"

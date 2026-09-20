@@ -1,7 +1,8 @@
 //! Shared helpers for the process-level tests.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Child, Command};
+use std::time::{Duration, Instant};
 
 /// Spawn a just-written executable, tolerating a brief `ETXTBSY`.
 ///
@@ -13,13 +14,16 @@ use std::process::{Command, Output};
 ///
 /// Bounded, so a genuinely unrunnable program still fails the test rather than
 /// hanging, and every other error is returned untouched on the first try.
-pub fn spawn_tolerating_busy(cmd: &mut Command) -> std::io::Result<Output> {
+/// Returns the `Child` rather than the finished `Output`, so that a caller which
+/// needs to write to the program's stdin is covered too. `ETXTBSY` surfaces from
+/// `spawn`, so the retry belongs there; waiting is the caller's business.
+pub fn spawn_tolerating_busy(cmd: &mut Command) -> std::io::Result<Child> {
     use std::io::ErrorKind::ExecutableFileBusy;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        match cmd.output() {
-            Err(e) if e.kind() == ExecutableFileBusy && std::time::Instant::now() < deadline => {
-                std::thread::sleep(std::time::Duration::from_millis(20));
+        match cmd.spawn() {
+            Err(e) if e.kind() == ExecutableFileBusy && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
             }
             other => return other,
         }

@@ -3,7 +3,8 @@
 ; Built by CI with makensis over a staged package directory, i.e. the output of
 ; `cargo xtask package --target windows-x86_64`.
 ;
-;   makensis -DSRC=<staged dir> -DVERSION=<x.y.z> -DOUT=<file.exe> installer.nsi
+;   makensis -DSRC=<staged dir> -DVERSION=<x.y.z> -DICON=<icon.ico> \
+;            -DOUT=<file.exe> installer.nsi
 ;
 ; Two decisions worth stating, because both are deliberate:
 ;
@@ -25,6 +26,11 @@ Unicode true
 !endif
 !ifndef SRC
   !error "SRC must be defined: the staged package directory"
+!endif
+; Absolute, and required rather than defaulted: `${__FILEDIR__}` resolves
+; differently depending on where makensis was invoked from.
+!ifndef ICON
+  !error "ICON must be defined: the path to icon.ico (cargo xtask gen-icons)"
 !endif
 !ifndef OUT
   !define OUT "EasyFortran77-Setup.exe"
@@ -54,13 +60,6 @@ VIAddVersionKey "LegalCopyright" "MIT OR Apache-2.0; bundled GNU toolchain under
 ; installed -- it is on the file they download. Same artwork as the application
 ; and the uninstaller, generated from logo.png by `cargo xtask gen-icons`.
 ;
-; Required rather than defaulted, like SRC. `${__FILEDIR__}` looked like the
-; obvious default and is not dependable: invoked from the repository root it
-; yielded `packaging/windows/\icon.ico` and from this directory `.icon.ico`,
-; neither of which opens. One explicit path has one behaviour.
-!ifndef ICON
-  !error "ICON must be defined: the path to icon.ico (cargo xtask gen-icons)"
-!endif
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
 

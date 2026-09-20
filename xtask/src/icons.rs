@@ -13,9 +13,11 @@
 //!   is how Linux gets one at all.
 
 use anyhow::{bail, Context, Result};
+use image::codecs::ico::{IcoEncoder, IcoFrame};
 use image::imageops::FilterType;
 use image::ImageEncoder;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Sizes Windows actually asks for. 256 is the largest an `.ico` can hold, and
 /// the small ones are worth generating rather than letting the shell downscale:
@@ -31,136 +33,111 @@ pub fn run(args: &[String]) -> Result<()> {
         bail!("unknown option `{a}`\n\nUSAGE: cargo xtask gen-icons");
     }
     let root = crate::repo_root();
-    let source = root.join("logo.png");
-    let logo = image::open(&source)
-        .with_context(|| format!("reading {}", source.display()))?
-        .into_rgba8();
-    println!(
-        "source   {} ({}x{})",
-        source.display(),
-        logo.width(),
-        logo.height()
-    );
+    let g = generate(&root)?;
 
-    let ico_path = root.join("packaging").join("windows").join("icon.ico");
-    let png_path = root
-        .join("crates")
-        .join("ef-gui")
-        .join("assets")
-        .join(format!("icon-{WINDOW_ICON}.png"));
-
-    let mut frames = Vec::new();
-    for &size in ICO_SIZES {
-        let scaled = image::imageops::resize(&logo, size, size, FilterType::Lanczos3);
-        let mut png = Vec::new();
-        image::codecs::png::PngEncoder::new_with_quality(
-            &mut png,
-            image::codecs::png::CompressionType::Best,
-            image::codecs::png::FilterType::Adaptive,
-        )
-        .write_image(&scaled, size, size, image::ExtendedColorType::Rgba8)
-        .context("encoding an icon frame")?;
-        frames.push((size, png));
-    }
-
-    fs::create_dir_all(ico_path.parent().unwrap())?;
-    fs::write(&ico_path, ico_container(&frames)?)?;
+    let ico = ico_path(&root);
+    fs::create_dir_all(ico.parent().unwrap())?;
+    fs::write(&ico, &g.ico)?;
     println!(
         "ico      {} ({} sizes, {:.0} KB)",
-        ico_path.display(),
-        frames.len(),
-        fs::metadata(&ico_path)?.len() as f64 / 1e3
+        ico.display(),
+        ICO_SIZES.len(),
+        g.ico.len() as f64 / 1e3
     );
 
-    let window = image::imageops::resize(&logo, WINDOW_ICON, WINDOW_ICON, FilterType::Lanczos3);
-    fs::create_dir_all(png_path.parent().unwrap())?;
-    window.save(&png_path)?;
+    let png = window_png_path(&root);
+    fs::create_dir_all(png.parent().unwrap())?;
+    fs::write(&png, &g.window_png)?;
     println!(
         "png      {} ({:.0} KB)",
-        png_path.display(),
-        fs::metadata(&png_path)?.len() as f64 / 1e3
+        png.display(),
+        g.window_png.len() as f64 / 1e3
     );
     Ok(())
 }
 
-/// Wrap PNG frames in an `.ico` container.
-///
-/// Hand-written rather than pulled from a crate because the format is a header
-/// and a directory and nothing else. Every frame is stored as PNG, which Windows
-/// has read inside an `.ico` since Vista and which keeps the file small.
-fn ico_container(frames: &[(u32, Vec<u8>)]) -> Result<Vec<u8>> {
-    const DIR_ENTRY: usize = 16;
-    let mut out = Vec::new();
-    out.extend_from_slice(&0u16.to_le_bytes()); // reserved
-    out.extend_from_slice(&1u16.to_le_bytes()); // type: icon
-    out.extend_from_slice(&(frames.len() as u16).to_le_bytes());
-
-    let mut offset = 6 + DIR_ENTRY * frames.len();
-    for (size, png) in frames {
-        if *size > 256 {
-            bail!("{size} is larger than an .ico entry can describe");
-        }
-        // 256 is written as 0: the field is one byte and 256 does not fit.
-        let dim = if *size == 256 { 0u8 } else { *size as u8 };
-        out.push(dim); // width
-        out.push(dim); // height
-        out.push(0); // palette size, 0 for truecolour
-        out.push(0); // reserved
-        out.extend_from_slice(&1u16.to_le_bytes()); // colour planes
-        out.extend_from_slice(&32u16.to_le_bytes()); // bits per pixel
-        out.extend_from_slice(&(png.len() as u32).to_le_bytes());
-        out.extend_from_slice(&(offset as u32).to_le_bytes());
-        offset += png.len();
-    }
-    for (_, png) in frames {
-        out.extend_from_slice(png);
-    }
-    Ok(out)
+pub fn ico_path(root: &Path) -> PathBuf {
+    root.join("packaging").join("windows").join("icon.ico")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub fn window_png_path(root: &Path) -> PathBuf {
+    root.join("crates")
+        .join("ef-gui")
+        .join("assets")
+        .join(format!("icon-{WINDOW_ICON}.png"))
+}
 
-    fn png_frame(size: u32) -> (u32, Vec<u8>) {
-        let img = image::RgbaImage::from_pixel(size, size, image::Rgba([1, 2, 3, 255]));
-        let mut v = Vec::new();
-        image::codecs::png::PngEncoder::new(&mut v)
-            .write_image(&img, size, size, image::ExtendedColorType::Rgba8)
-            .unwrap();
-        (size, v)
+/// Everything the build's icons are, as bytes.
+pub struct Generated {
+    pub ico: Vec<u8>,
+    pub window_png: Vec<u8>,
+}
+
+/// Derive both icons from `logo.png`, writing nothing.
+///
+/// Separated from `run` so `check-hygiene` can regenerate and compare without
+/// touching the working tree — which is what turns "one source, one command"
+/// from a claim in a commit message into something CI enforces.
+pub fn generate(root: &Path) -> Result<Generated> {
+    let source = root.join("logo.png");
+    let logo = image::open(&source)
+        .with_context(|| format!("reading {}", source.display()))?
+        .into_rgba8();
+
+    // Encoded once, then used twice: 128 is one of the .ico sizes, so resizing
+    // and re-encoding it for the window would be a second Lanczos pass over the
+    // same source -- and would leave the shipped PNG and the .ico's own 128
+    // frame as different bytes for the same picture.
+    let mut encoded: Vec<(u32, Vec<u8>)> = Vec::new();
+    for &size in ICO_SIZES {
+        let scaled = image::imageops::resize(&logo, size, size, FilterType::Lanczos3);
+        encoded.push((size, encode_png(&scaled)?));
     }
 
-    #[test]
-    fn the_container_describes_every_frame_and_points_at_it() {
-        let frames: Vec<_> = [16u32, 256].iter().map(|s| png_frame(*s)).collect();
-        let ico = ico_container(&frames).unwrap();
+    let frames: Vec<IcoFrame> = encoded
+        .iter()
+        .map(|(size, png)| {
+            IcoFrame::with_encoded(
+                png.as_slice(),
+                *size,
+                *size,
+                image::ExtendedColorType::Rgba8,
+            )
+        })
+        .collect::<std::result::Result<_, _>>()?;
 
-        assert_eq!(&ico[0..2], &[0, 0], "reserved");
-        assert_eq!(u16::from_le_bytes([ico[2], ico[3]]), 1, "type is icon");
-        assert_eq!(u16::from_le_bytes([ico[4], ico[5]]), 2, "two frames");
+    let mut ico = Vec::new();
+    IcoEncoder::new(&mut ico)
+        .encode_images(&frames)
+        .context("encoding the .ico")?;
 
-        for (i, (size, png)) in frames.iter().enumerate() {
-            let e = 6 + 16 * i;
-            // 256 has to be written as 0; the field is a single byte.
-            let want = if *size == 256 { 0 } else { *size as u8 };
-            assert_eq!(ico[e], want, "width of frame {i}");
-            assert_eq!(ico[e + 1], want, "height of frame {i}");
-            let len = u32::from_le_bytes(ico[e + 8..e + 12].try_into().unwrap()) as usize;
-            let off = u32::from_le_bytes(ico[e + 12..e + 16].try_into().unwrap()) as usize;
-            assert_eq!(len, png.len());
-            // The offset must land exactly on that frame's PNG signature.
-            assert_eq!(&ico[off..off + 8], &png[..8], "frame {i} is where it says");
-            assert_eq!(&ico[off..off + len], &png[..], "frame {i} round-trips");
-        }
-        assert_eq!(
-            ico.len(),
-            6 + 32 + frames.iter().map(|(_, p)| p.len()).sum::<usize>()
-        );
-    }
+    let window_png = encoded
+        .iter()
+        .find(|(size, _)| *size == WINDOW_ICON)
+        .expect("WINDOW_ICON is one of ICO_SIZES")
+        .1
+        .clone();
 
-    #[test]
-    fn a_frame_too_large_to_describe_is_refused() {
-        assert!(ico_container(&[png_frame(257)]).is_err());
-    }
+    Ok(Generated { ico, window_png })
+}
+
+/// Encode one image as PNG, the same way every time.
+///
+/// `Best` with an adaptive filter, because these are written once by a
+/// maintainer and downloaded by everyone: the bytes are worth the second.
+fn encode_png(img: &image::RgbaImage) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new_with_quality(
+        &mut out,
+        image::codecs::png::CompressionType::Best,
+        image::codecs::png::FilterType::Adaptive,
+    )
+    .write_image(
+        img,
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgba8,
+    )
+    .context("encoding a PNG")?;
+    Ok(out)
 }

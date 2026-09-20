@@ -6,6 +6,7 @@
 
 fn main() {
     println!("cargo:rerun-if-changed=../../packaging/windows/icon.ico");
+    println!("cargo:rerun-if-env-changed=EF77_REQUIRE_ICON");
 
     #[cfg(windows)]
     {
@@ -25,8 +26,13 @@ fn main() {
         res.set("FileDescription", "Easy Fortran 77");
         if let Err(e) = res.compile() {
             // The resource compiler is part of the Windows SDK, and its absence
-            // should cost an icon rather than a build.
-            println!("cargo:warning=could not embed the icon: {e}");
+            // should cost an icon rather than a build -- unless this is a
+            // release, where a missing icon is the bug being guarded against.
+            let msg = format!("could not embed the icon: {e}");
+            if std::env::var_os("EF77_REQUIRE_ICON").is_some() {
+                panic!("{msg}");
+            }
+            println!("cargo:warning={msg}");
         }
     }
 }

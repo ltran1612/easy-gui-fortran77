@@ -132,8 +132,16 @@ fn a_real_prebuilt_object_is_linked_and_its_code_runs() {
     );
 
     let exe = outcome.exe.expect("no executable");
-    let out = ef_testkit::spawn_tolerating_busy(tc.run_binary(&exe).current_dir(layout.out()))
-        .expect("could not run the built program");
+    let out = ef_testkit::spawn_tolerating_busy(
+        tc.run_binary(&exe)
+            .current_dir(layout.out())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped()),
+    )
+    .expect("could not run the built program")
+    .wait_with_output()
+    .expect("waiting for the built program");
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(
         text.contains("42.0") || text.contains("42."),

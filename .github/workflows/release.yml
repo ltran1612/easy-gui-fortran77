@@ -118,6 +118,9 @@ jobs:
 
       - name: Build the application
         run: cargo build --release -p ef-gui -p ef-cli
+        env:
+          # A release that quietly loses its icon is the bug v0.1.0 shipped.
+          EF77_REQUIRE_ICON: "1"
 
       - name: Package
         run: cargo xtask package --target ${{ matrix.target }}
