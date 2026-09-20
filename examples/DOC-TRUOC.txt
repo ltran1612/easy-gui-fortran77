@@ -1,36 +1,49 @@
-VÍ DỤ ĐỂ THỬ EASY FORTRAN 77
-============================
+VÍ DỤ FORTRAN 77 — ĐỂ THỬ EASY FORTRAN 77
+=========================================
 
-Ba ví dụ, từ dễ đến khó. Mở ứng dụng, bấm "Chương trình mới", rồi
-"Thêm tệp…" và chọn tệp tương ứng.
-
-
-1. DAMBTCT.FOR  —  một tệp duy nhất
-   Tính dầm bê tông cốt thép đơn giản. Thêm đúng một tệp này rồi bấm
-   nút xanh. Nó phải biên dịch không lỗi, không cảnh báo.
+Năm ví dụ, đi từ dễ đến khó, dạy các phần cơ bản của Fortran 77.
+Mở ứng dụng, bấm "Chương trình mới", rồi "Thêm tệp…" và chọn tệp.
 
 
-2. NHIEUTEP/  —  nhiều tệp + INCLUDE
-   Thêm CẢ HAI tệp, theo đúng thứ tự này:
-       CHINH.FOR      (chương trình chính)
-       TINHTOAN.FOR   (các chương trình con)
+1. 01-CO-BAN.FOR
+   Biến và kiểu dữ liệu (INTEGER, REAL, CHARACTER, LOGICAL), phép tính,
+   in ra màn hình bằng WRITE, căn cột bằng FORMAT, vài hàm có sẵn
+   (SQRT, ABS, MAX, MOD).
+
+2. 02-VONG-LAP.FOR
+   Vòng lặp DO (kể cả bước nhảy âm), mảng, rẽ nhánh
+   IF / ELSE IF / ELSE, và vòng lặp lồng nhau.
+
+3. 03-CHUONG-TRINH-CON/
+   SUBROUTINE và FUNCTION, chia chương trình ra nhiều tệp.
+   Thêm CẢ HAI tệp, theo thứ tự:  CHINH.FOR  rồi  CONGCU.FOR
    KHÔNG thêm THAMSO.INC — ứng dụng tự tìm thấy nó.
-   Ví dụ này sẽ hiện vài cảnh báo; đó là bình thường, không phải lỗi.
 
+4. 04-DOC-GHI-TEP.FOR
+   Đọc và ghi tệp: OPEN, WRITE, READ, CLOSE. Đây là cách các chương
+   trình cũ nhận số liệu vào và xuất kết quả ra. Chương trình tạo ra
+   tệp SOLIEU.TXT ngay cạnh nó rồi đọc lại.
 
-3. LOI-COT72.FOR  —  ví dụ CÓ LỖI, cố ý
-   Dùng để xem ứng dụng báo lỗi thế nào. Dòng WRITE dài quá 72 cột,
-   mà Fortran 77 chỉ đọc đến cột 72, nên dấu nháy cuối bị cắt mất.
-   Cách sửa: mở "Tuỳ chọn nâng cao" và đổi sang 132 cột, rồi dịch lại.
+5. 05-LOI-COT72.FOR
+   Ví dụ CÓ LỖI, cố ý — để xem ứng dụng báo lỗi thế nào.
+   Dòng WRITE dài quá 72 cột, mà Fortran 77 chỉ đọc đến cột 72, nên
+   dấu nháy cuối bị cắt mất.
+   CÁCH SỬA: mở "Tuỳ chọn nâng cao", đổi sang 132 cột, rồi dịch lại.
 
 
 ---------------------------------------------------------------------
 
-EXAMPLES FOR TESTING EASY FORTRAN 77
+FORTRAN 77 EXAMPLES — FOR TESTING EASY FORTRAN 77
 
-1. DAMBTCT.FOR      one file, compiles cleanly.
-2. NHIEUTEP/        add CHINH.FOR then TINHTOAN.FOR, in that order.
-                    Do not add THAMSO.INC; it is found automatically.
-                    Expect warnings, not errors.
-3. LOI-COT72.FOR    deliberately broken: a line past column 72.
-                    Fix it with the "132 columns" option.
+Five examples, easiest first, covering the basics of the language.
+
+1. 01-CO-BAN.FOR          variables and types, arithmetic, WRITE,
+                          FORMAT, intrinsic functions.
+2. 02-VONG-LAP.FOR        DO loops, arrays, IF/ELSE IF/ELSE, nesting.
+3. 03-CHUONG-TRINH-CON/   SUBROUTINE and FUNCTION across two files.
+                          Add CHINH.FOR then CONGCU.FOR, in that order.
+                          Do not add THAMSO.INC; it is found for you.
+4. 04-DOC-GHI-TEP.FOR     file I/O: OPEN, WRITE, READ, CLOSE.
+                          Writes SOLIEU.TXT beside itself, then reads it.
+5. 05-LOI-COT72.FOR       deliberately broken: a line past column 72.
+                          Fix it with the "132 columns" option.

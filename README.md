@@ -32,17 +32,24 @@ v0.2 and v1.0 work.
 
 ## Something to try it on
 
-`examples/` holds three small programs, with a bilingual guide beside them:
+`examples/` holds five small programs, easiest first, with a bilingual guide
+beside them. Together they cover the parts of Fortran 77 most legacy code is
+made of:
 
 | | |
 |---|---|
-| `DAMBTCT.FOR` | one file, a reinforced-concrete beam check. Compiles clean. |
-| `NHIEUTEP/` | two sources plus an `INCLUDE` the application resolves on its own. Warns, does not fail. |
-| `LOI-COT72.FOR` | broken on purpose — a line past column 72, which is the trap card-image code falls into. The "132 columns" option is the fix. |
+| `01-CO-BAN.FOR` | variables and types, arithmetic, `WRITE`, `FORMAT`, intrinsics |
+| `02-VONG-LAP.FOR` | `DO` loops including a negative step, arrays, `IF`/`ELSE IF`/`ELSE`, nesting |
+| `03-CHUONG-TRINH-CON/` | `SUBROUTINE` and `FUNCTION` across two files, plus an `INCLUDE` the application resolves on its own |
+| `04-DOC-GHI-TEP.FOR` | `OPEN`/`WRITE`/`READ`/`CLOSE` — how a program of this vintage takes data in and puts results out |
+| `05-LOI-COT72.FOR` | broken on purpose: a line past column 72, the trap card-image code falls into. The "132 columns" option is the fix. |
 
-All four outcomes are asserted by `cargo test -p ef-testkit --test examples`,
-including that the broken one still fails and still stops failing at 132
-columns. An example that quietly stopped working would be worse than none.
+`cargo test -p ef-testkit --test examples` asserts every documented outcome —
+that each one builds, that the broken one still fails at 72 and still stops
+failing at 132, that the guide names every file present, and that each program
+**runs** and produces output. That last check exists because an earlier draft of
+the file-I/O example compiled cleanly and died at run time on a `FORMAT` that
+did not match what it read back.
 
 ## Building and running
 

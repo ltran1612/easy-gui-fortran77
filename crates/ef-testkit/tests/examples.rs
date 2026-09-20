@@ -40,24 +40,39 @@ fn every_example_behaves_the_way_its_guide_says() {
     // (what the guide calls it, the files in the order it says to add them,
     //  the column setting, whether it should build)
     let cases: &[(&str, &[&str], LineLength, bool)] = &[
-        ("one file", &["DAMBTCT.FOR"], LineLength::Col72, true),
+        ("basics", &["01-CO-BAN.FOR"], LineLength::Col72, true),
         (
-            "several files and an INCLUDE",
-            &["NHIEUTEP/CHINH.FOR", "NHIEUTEP/TINHTOAN.FOR"],
+            "loops and branching",
+            &["02-VONG-LAP.FOR"],
+            LineLength::Col72,
+            true,
+        ),
+        (
+            "subroutines across two files",
+            &[
+                "03-CHUONG-TRINH-CON/CHINH.FOR",
+                "03-CHUONG-TRINH-CON/CONGCU.FOR",
+            ],
+            LineLength::Col72,
+            true,
+        ),
+        (
+            "file input and output",
+            &["04-DOC-GHI-TEP.FOR"],
             LineLength::Col72,
             true,
         ),
         // The guide's whole point: it fails at 72 columns...
         (
             "broken past column 72",
-            &["LOI-COT72.FOR"],
+            &["05-LOI-COT72.FOR"],
             LineLength::Col72,
             false,
         ),
         // ...and the option it names is the fix.
         (
             "...fixed at 132",
-            &["LOI-COT72.FOR"],
+            &["05-LOI-COT72.FOR"],
             LineLength::Col132,
             true,
         ),
@@ -98,6 +113,37 @@ fn every_example_behaves_the_way_its_guide_says() {
                 outcome.errors,
                 outcome.raw.lines().take(4).collect::<Vec<_>>().join("\n")
             ));
+            continue;
+        }
+
+        // Compiling is not the same as working. An earlier version of the file
+        // I/O example built cleanly and died at run time on a FORMAT that did
+        // not match what it read back, which is exactly what an example must
+        // not do to someone learning from it.
+        let Some(exe) = &outcome.exe else { continue };
+        let run_in = tmp.path().join(format!("run-{n}"));
+        std::fs::create_dir_all(&run_in).unwrap();
+        let ran = ef_testkit::spawn_tolerating_busy(
+            tc.run_binary(exe)
+                .current_dir(&run_in)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped()),
+        )
+        .and_then(|c| c.wait_with_output());
+        match ran {
+            Ok(o) if o.status.success() && !o.stdout.is_empty() => {}
+            Ok(o) => failures.push(format!(
+                "[{name}] built, then exited {:?} with {} bytes of output\n{}",
+                o.status.code(),
+                o.stdout.len(),
+                String::from_utf8_lossy(&o.stderr)
+                    .lines()
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )),
+            Err(e) => failures.push(format!("[{name}] built but would not run: {e}")),
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
