@@ -90,6 +90,11 @@ cargo run -p ef-cli -- build MAIN.FOR SUB.FOR --out ~/Desktop/solver
 
 ## Layout
 
+Changing this code? Start with [ARCHITECTURE.md](ARCHITECTURE.md): the crate
+layout, how a build flows end to end, what CI enforces and why, and the handful
+of things that look wrong and are not.
+
+
 | Crate | What it is |
 |---|---|
 | `ef-core` | All the logic. No GUI dependencies, so the whole pipeline is testable headlessly. |
