@@ -119,6 +119,25 @@ impl FsGuard {
         fs::create_dir_all(path).map_err(|e| EfError::io(path, e))
     }
 
+    /// Write a file inside the build tree. Deliberately not fsynced.
+    ///
+    /// Everything this writes is scratch: staged copies of the user's sources,
+    /// staged libraries, and the pause shim, all under a build directory that
+    /// hangs off a per-process session directory and is thrown away. No later
+    /// process reads another session's tree, and the compiler reads these back
+    /// through the page cache in the same boot, which fsync does not affect --
+    /// so there is no crash that fsync would make recoverable here. A crashed
+    /// build is abandoned whole, not resumed.
+    ///
+    /// It is not free: measured on btrfs, `sync_all` costs about 6 ms per file
+    /// against 0.011 ms without, so a seven-file Windows build spent roughly
+    /// 64 ms of its wall clock waiting for durability nobody wanted. On tmpfs
+    /// it costs nothing, which is why measuring with the work root on /tmp
+    /// shows none of this.
+    ///
+    /// Durable writes do not come through here. `write_file_atomic` below keeps
+    /// its own fsync, and it is what `config` uses for the two files the user
+    /// would actually miss.
     pub fn write_file(&self, path: &Path, bytes: &[u8]) -> Result<()> {
         self.assert_under_write_root(path)?;
         if let Some(parent) = path.parent() {
@@ -126,7 +145,6 @@ impl FsGuard {
         }
         let mut f = File::create(path).map_err(|e| EfError::io(path, e))?;
         f.write_all(bytes).map_err(|e| EfError::io(path, e))?;
-        f.sync_all().map_err(|e| EfError::io(path, e))?;
         Ok(())
     }
 
