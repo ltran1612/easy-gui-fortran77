@@ -64,6 +64,22 @@ and publishes it as a release artefact.
 `toolchain/README.md` has the detail, including why the prune is a keep-list and
 which three things must never be dropped from it.
 
+**The version is pinned in four places and they are checked against each other.**
+`gcc_version` in the recipe, the package filenames it names, `version` in the
+bundle descriptor, and the GCC version that appears as a directory component in
+the descriptor's `-B` paths. `check_version_is_pinned` in `xtask/src/fetch.rs`
+fails the fetch if any of them disagree, and asks the compiler itself when the
+host can run it. A bump that updates three of the four is the realistic mistake,
+and two of its outcomes are silent.
+
+**A damaged bundle is never replaced by a system compiler.** `discover` falls
+through to `gfortran` on PATH only when no bundle was shipped at all; a bundle
+that is present and will not load is reported as a damaged installation. This
+matters more than it looks: Windows machines carry a gfortran on PATH for
+reasons unrelated to us — Strawberry Perl, MSYS2, Anaconda — and quietly
+compiling with one would hand the user a program built by a compiler nobody
+pinned, with different numerics, and nothing on screen to say so.
+
 ## What CI enforces
 
 `cargo xtask check-hygiene` turns the structural rules into build failures:
@@ -114,6 +130,17 @@ skip into a failure, and CI sets it so the corpus can never be silently skipped.
 
 Wrapped around every corpus case is the one assertion the product exists for: the
 source tree is byte-identical before and after.
+
+**`corpus/precision` pins the arithmetic itself.** Its expected values are IEEE
+754 facts worked out away from this toolchain, read as bit patterns through
+`EQUIVALENCE` so no `WRITE` formatting sits between the arithmetic and the
+assertion. It covers single-precision storage, the widened-single trap in a
+`DOUBLE PRECISION` assignment, denormals surviving (a zero there means something
+turned on flush-to-zero), unreassociated accumulation, integer truncation and
+mixed-mode evaluation. `tests/precision.rs` then asserts the two directions that
+pinning alone leaves open: `-O0`, `-O1` and `-O2` must agree to the digit, and
+turning on `default_real8` must *disagree* — the second is what stops the first
+from passing for reasons unrelated to arithmetic.
 
 ## Things that look wrong and are not
 

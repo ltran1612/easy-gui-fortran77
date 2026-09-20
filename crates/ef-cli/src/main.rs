@@ -246,8 +246,15 @@ fn find_toolchain() -> Result<Toolchain> {
         .and_then(|p| Store::new(p).ok())
         .and_then(|s| s.load_settings().ok())
         .and_then(|s| s.toolchain_override);
-    toolchain::discover(store_override.as_deref())
-        .context("no Fortran compiler found (install gfortran, or set EF77_TOOLCHAIN)")
+    toolchain::discover(store_override.as_deref()).map_err(|e| match e {
+        // Nothing shipped and nothing installed: the hint is the useful part.
+        ef_core::error::EfError::ToolchainMissing => anyhow::Error::new(e)
+            .context("no Fortran compiler found (install gfortran, or set EF77_TOOLCHAIN)"),
+        // A bundle is present and will not load. Saying "install gfortran" would
+        // send someone to fix the wrong thing -- and installing one is precisely
+        // what must not happen, because then the next build would silently use it.
+        other => anyhow::Error::new(other),
+    })
 }
 
 fn program_from(o: &Opts) -> Result<Program> {

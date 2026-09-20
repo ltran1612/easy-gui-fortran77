@@ -326,6 +326,9 @@ pub fn run(args: &[String]) -> Result<()> {
     // tried to build with it.
     check_driver_present(&bundle, &template)?;
 
+    // And that it is the version the recipe pins, not merely *a* compiler.
+    check_version_is_pinned(&recipe, &template, &bundle)?;
+
     let manifest = write_manifest(&bundle, &root)?;
     println!("manifest  {}", manifest.display());
     println!();
@@ -601,6 +604,104 @@ fn check_driver_present(bundle: &Path, template: &Path) -> Result<()> {
     }
     println!("driver    {rel}");
     Ok(())
+}
+
+/// The version is written in four places. They must agree.
+///
+/// `gcc_version` in the recipe, the package filenames it pins, `version` in the
+/// bundle descriptor, and the `-B` paths inside that descriptor which name the
+/// GCC version as a directory component. A bump that updates three of the four
+/// is the realistic mistake, and two of its outcomes are quiet: the descriptor
+/// reports a version the binaries are not, which is what the application shows
+/// the user and what the shim cache keys on.
+///
+/// This is what makes "pinned" mean something. Without it the recipe records an
+/// intention and nothing checks the result.
+fn check_version_is_pinned(recipe: &Recipe, template: &Path, bundle: &Path) -> Result<()> {
+    let want = recipe.gcc_version.trim();
+    if want.is_empty() {
+        bail!("the recipe sets no `gcc_version`, so nothing pins the compiler");
+    }
+
+    // 1. The compiler packages themselves.
+    for p in &recipe.packages {
+        let is_the_compiler = p.name.contains("gcc_impl") || p.name.contains("gfortran_impl");
+        if is_the_compiler && p.version.trim() != want {
+            bail!(
+                "recipe pins gcc_version {want}, but package `{}` is version {}",
+                p.name,
+                p.version
+            );
+        }
+    }
+
+    let text =
+        fs::read_to_string(template).with_context(|| format!("reading {}", template.display()))?;
+
+    // 2. The version the descriptor declares, which is the one the application
+    //    reports and caches on -- it is taken on trust at runtime, so it is
+    //    checked here instead.
+    let declared = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("version"))
+        .and_then(|r| r.split('=').nth(1))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .unwrap_or_default();
+    if declared != want {
+        bail!(
+            "{} declares version \"{declared}\", but the recipe pins {want}",
+            template.display()
+        );
+    }
+
+    // 3. The `-B` paths. GCC finds f951, crtbegin.o and libgfortran.a through
+    //    these, so a stale one does not report a wrong version -- it fails to
+    //    link, on the user's machine, with a message about a missing file.
+    for line in text.lines() {
+        for seg in line.split('/') {
+            let looks_like_a_version = seg.len() >= 3
+                && seg.split('.').count() == 3
+                && seg
+                    .split('.')
+                    .all(|c| !c.is_empty() && c.bytes().all(|b| b.is_ascii_digit()));
+            if looks_like_a_version && seg != want {
+                bail!(
+                    "{} names GCC version `{seg}` in a search path, but the recipe pins {want}:\n  {}",
+                    template.display(),
+                    line.trim()
+                );
+            }
+        }
+    }
+
+    // 4. And, where this host can run it, the compiler's own answer. A
+    //    cross-built bundle cannot be asked -- fetching the Windows bundle on
+    //    Linux is the normal case -- so this reports rather than fails.
+    let driver = bundle.join(driver_rel(&text)?);
+    match std::process::Command::new(&driver)
+        .arg("-dumpfullversion")
+        .output()
+    {
+        Ok(out) if out.status.success() => {
+            let got = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if got != want {
+                bail!("the bundled compiler reports version {got}, but the recipe pins {want}");
+            }
+            println!("version   {want} (confirmed by the compiler itself)");
+        }
+        _ => println!("version   {want} (cross-built; not runnable on this host to confirm)"),
+    }
+    Ok(())
+}
+
+/// The `gfortran` entry of a bundle descriptor, as a relative path.
+fn driver_rel(template_text: &str) -> Result<String> {
+    template_text
+        .lines()
+        .find(|l| l.trim_start().starts_with("gfortran"))
+        .and_then(|l| l.split('=').nth(1))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .ok_or_else(|| anyhow::anyhow!("the bundle descriptor names no `gfortran`"))
 }
 
 // ------------------------------------------------------------------ manifest

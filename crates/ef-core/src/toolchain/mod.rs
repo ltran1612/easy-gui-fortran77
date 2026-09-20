@@ -319,7 +319,9 @@ fn query_version(gfortran: &Path, launcher: Option<&str>) -> Option<String> {
 /// 2. `EF77_TOOLCHAIN_BUNDLE` — a bundle root, for exercising the bundled path
 /// 3. `EF77_TOOLCHAIN` — a bare driver, used by CI and by `cargo run`
 /// 4. the bundled toolchain beside our own executable
-/// 5. the system gfortran on PATH
+/// 5. the system gfortran on PATH — but only if step 4 found no bundle at all
+///
+/// Step 5 is deliberately not a fallback for a *broken* bundle. See below.
 pub fn discover(override_path: Option<&Path>) -> Result<Toolchain> {
     if let Some(p) = override_path {
         return Toolchain::from_path(p.to_path_buf(), ToolchainKind::UserSpecified);
@@ -335,13 +337,8 @@ pub fn discover(override_path: Option<&Path>) -> Result<Toolchain> {
             return Toolchain::from_path(PathBuf::from(p), ToolchainKind::UserSpecified);
         }
     }
-    for root in bundled_roots() {
-        if looks_like_a_bundle(&root) {
-            match Toolchain::from_bundle(&root) {
-                Ok(tc) => return Ok(tc),
-                Err(e) => tracing::warn!("ignoring bundle at {}: {e}", root.display()),
-            }
-        }
+    if let Some(found) = bundled_toolchain(&bundled_roots()) {
+        return found;
     }
     for name in [
         "gfortran",
@@ -355,6 +352,40 @@ pub fn discover(override_path: Option<&Path>) -> Result<Toolchain> {
         }
     }
     Err(EfError::ToolchainMissing)
+}
+
+/// Step 4 of `discover`, and the reason step 5 is not a fallback for it.
+///
+/// `None` means no bundle was shipped -- the only case in which compiling with
+/// whatever gfortran is on PATH is the right answer. `Some(Err)` means a bundle
+/// is there and will not load, which is a damaged installation and is reported
+/// as one: the application already has the words for it, in both languages
+/// (`toolchain.missing.reinstall`, and the antivirus topic beside it).
+///
+/// The distinction is the whole point. Windows machines carry a gfortran on PATH
+/// for reasons that have nothing to do with us -- Strawberry Perl, MSYS2,
+/// Anaconda, some ancient MinGW -- so a fallback would mean the program the user
+/// receives was built by a compiler nobody chose and no recipe pinned, with
+/// different defaults and different numerics, and nothing on screen to say so.
+/// The symptom reaching the user would be a program that gives different numbers
+/// than it did yesterday. "Reinstall the application" is a far better failure.
+///
+/// Separated from `discover` so that policy can be tested without arranging for
+/// `current_exe()` to sit next to a chosen directory.
+fn bundled_toolchain(roots: &[PathBuf]) -> Option<Result<Toolchain>> {
+    let mut damaged: Option<EfError> = None;
+    for root in roots {
+        if looks_like_a_bundle(root) {
+            match Toolchain::from_bundle(root) {
+                Ok(tc) => return Some(Ok(tc)),
+                Err(e) => {
+                    tracing::warn!("bundle at {} will not load: {e}", root.display());
+                    damaged.get_or_insert(e);
+                }
+            }
+        }
+    }
+    damaged.map(Err)
 }
 
 /// Was a toolchain bundle shipped beside this executable?
@@ -599,6 +630,43 @@ mod tests {
         let td = tempfile::tempdir().unwrap();
         std::fs::write(td.path().join(bundle::BUNDLE_FILE), "id = \"x\"\n").unwrap();
         assert!(looks_like_a_bundle(td.path()));
+    }
+
+    #[test]
+    fn a_damaged_bundle_is_reported_rather_than_replaced_by_whatever_is_on_path() {
+        // The pin is only worth as much as this. A bundle that will not load is
+        // a damaged installation, and the user must be told so -- because the
+        // alternative, compiling with some unrelated gfortran that Strawberry
+        // Perl or Anaconda left on PATH, changes the numbers the program prints
+        // and says nothing about it.
+        let td = tempfile::tempdir().unwrap();
+        std::fs::write(
+            td.path().join(bundle::BUNDLE_FILE),
+            "id = \"x\"\nversion = \"16.2.0\"\ngfortran = \"bin/gone\"\n",
+        )
+        .unwrap();
+
+        let got = bundled_toolchain(&[td.path().to_path_buf()]);
+        match got {
+            Some(Err(EfError::ToolchainInvalid { .. })) => {}
+            Some(Ok(_)) => panic!("a bundle with no compiler in it must not load"),
+            Some(Err(e)) => panic!("expected ToolchainInvalid, got {e:?}"),
+            None => panic!(
+                "a damaged bundle reported as `no bundle` is exactly the bug: \
+                 discover would fall through to the system compiler"
+            ),
+        }
+    }
+
+    #[test]
+    fn no_bundle_at_all_still_defers_to_the_system_compiler() {
+        // The other half, and why this cannot just be a hard error: a developer
+        // build ships no bundle, and must go on finding gfortran on PATH.
+        let td = tempfile::tempdir().unwrap();
+        assert!(
+            bundled_toolchain(&[td.path().to_path_buf()]).is_none(),
+            "an empty directory is not a bundle, damaged or otherwise"
+        );
     }
 
     #[test]

@@ -1,0 +1,23 @@
+description = "Arithmetic under the settings the application ships. Every value is an IEEE 754 fact, asserted exactly."
+sources = ["PRECIS.FOR", "OPAQUE.FOR"]
+success = true
+run = true
+exit_code = 0
+stdout_contains = [
+  # single 0.1                                       0x3DCCCCCD
+  "A  1036831949",
+  # single 1.0/3.0                                   0x3EAAAAAB
+  "B  1051372203",
+  # (double)(single 1/3): low half is zero           0x3FD5555600000000
+  "C  1610612736  1070945621",
+  # double 1.0D0/3.0D0                               0x3FD5555555555555
+  "D  1431655765  1070945621",
+  # smallest normal single halved: still a denormal  0x00400000
+  "E     4194304",
+  # ten single 0.1 summed = 1.0000001, not 1.0       (1.0 is 1065353216)
+  "F  1065353217",
+  # 7/2, -7/2, MOD(-7,2), MOD(7,-2)
+  "G     3    -3    -1     1",
+  # 1/2 * 2.0 is 0.0, because 1/2 is an integer divide
+  "H           0",
+]
