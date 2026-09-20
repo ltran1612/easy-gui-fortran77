@@ -333,10 +333,10 @@ fn the_built_program_can_be_saved_where_he_chooses_and_still_runs() {
     f.guard.export_built_program(&exe, &dest).unwrap();
     assert!(dest.exists());
 
-    let out = std::process::Command::new(&dest)
-        .stdin(std::process::Stdio::null())
-        .output()
-        .expect("the saved program must be executable");
+    let out = ef_testkit::spawn_tolerating_busy(
+        std::process::Command::new(&dest).stdin(std::process::Stdio::null()),
+    )
+    .expect("the saved program must be executable");
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(
         text.contains("Nhap so N:"),

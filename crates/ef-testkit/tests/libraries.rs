@@ -132,10 +132,7 @@ fn a_real_prebuilt_object_is_linked_and_its_code_runs() {
     );
 
     let exe = outcome.exe.expect("no executable");
-    let out = tc
-        .run_binary(&exe)
-        .current_dir(layout.out())
-        .output()
+    let out = ef_testkit::spawn_tolerating_busy(tc.run_binary(&exe).current_dir(layout.out()))
         .expect("could not run the built program");
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(
