@@ -261,6 +261,7 @@ fn check_hygiene() -> Result<()> {
 
     check_no_binaries_tracked(&root, &mut v)?;
     check_manifest_is_a_placeholder(&root, &mut v);
+    check_installer_keeps_its_bom(&root, &mut v);
     check_i18n_keys(&root, &mut v)?;
     check_icons_match_logo(&root, &mut v);
 
@@ -417,6 +418,35 @@ fn check_hygiene() -> Result<()> {
 /// bundle as missing and refuses to build. The fetch task overwrites this file
 /// as a matter of course, so it is easy to commit by accident -- easy enough
 /// that it happened once.
+/// The NSIS script must keep its UTF-8 byte order mark.
+///
+/// `Unicode true` inside the script makes the *installer* Unicode and says
+/// nothing about how makensis reads the script itself. Without the mark it reads
+/// it in the build machine's ANSI codepage, so the Vietnamese survives a build on
+/// a UTF-8 machine and arrives doubly encoded from a build on Windows. That is
+/// not hypothetical: it is how `Gỡ cài đặt` reached a Start Menu as
+/// `Gá»¡ cÃ i Ä‘áº·t`, in a release, in the first screen a Vietnamese-speaking
+/// user sees.
+///
+/// A byte order mark is the kind of thing an editor removes without mentioning
+/// it, and the damage only appears on a machine nobody is looking at.
+fn check_installer_keeps_its_bom(root: &Path, v: &mut Vec<Violation>) {
+    let rel = "packaging/windows/installer.nsi";
+    let path = root.join(rel);
+    let Ok(bytes) = std::fs::read(&path) else {
+        return;
+    };
+    if !bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        v.push(Violation {
+            file: PathBuf::from(rel),
+            line: 1,
+            text: "(no UTF-8 byte order mark)".into(),
+            rule: "installer.nsi must begin with a UTF-8 BOM, or makensis reads it \
+                   in the build machine's codepage and mangles every Vietnamese string",
+        });
+    }
+}
+
 fn check_manifest_is_a_placeholder(root: &Path, v: &mut Vec<Violation>) {
     let rel = PathBuf::from("crates/ef-gui/assets/toolchain-manifest.txt");
 

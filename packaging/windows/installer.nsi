@@ -1,5 +1,15 @@
-; Easy Fortran 77 — Windows installer.
+﻿; Easy Fortran 77 — Windows installer.
 ;
+;
+; This file begins with a UTF-8 byte order mark, and must keep it.
+;
+; `Unicode true` above makes the *installer* Unicode; it says nothing about
+; how makensis reads this source. Without the mark, makensis reads the file in
+; the build machine's ANSI codepage — so the Vietnamese below survives a build
+; on a UTF-8 Linux box and comes out doubly encoded when CI builds it on
+; Windows, where the codepage is CP1252. That is how `Gỡ cài đặt` reached a
+; Start Menu as `Gá»¡ cÃ i Ä‘áº·t`: mojibake in the first screen a
+; Vietnamese-speaking user ever sees, and in the shortcut left behind.
 ; Built by CI with makensis over a staged package directory, i.e. the output of
 ; `cargo xtask package --target windows-x86_64`.
 ;
