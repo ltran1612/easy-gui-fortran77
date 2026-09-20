@@ -96,6 +96,21 @@ fn a_bundle_descriptor_round_trips_without_a_compiler() {
 
 #[test]
 fn a_bundled_toolchain_compiles_and_runs_a_real_program() {
+    // On Unix the stand-in bundle symlinks the host's driver, and GCC follows the
+    // link back to its real installation to find f951 and its libraries. Windows
+    // has no equivalent: the driver derives its prefix from argv[0], so a copy
+    // (or a symlink, which GetModuleFileName does not resolve) makes it search
+    // the empty test bundle and probe nothing. Standing up a working bundle here
+    // would mean copying a whole GCC installation.
+    //
+    // Little is lost: the real Windows bundle compiles and runs the entire corpus
+    // in the `Bundled toolchain (Windows)` job, which is the case this stands in
+    // for, and the bundle plumbing either side of it is covered by the other
+    // tests in this file, which use the fake compiler and do run here.
+    if cfg!(windows) {
+        eprintln!("SKIPPING on Windows: a driver copied out of its installation cannot probe");
+        return;
+    }
     let Some(driver) = system_gfortran() else {
         eprintln!("SKIPPING: no gfortran to build a test bundle around");
         return;
