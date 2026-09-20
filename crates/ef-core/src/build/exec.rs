@@ -81,7 +81,7 @@ pub fn run_capture(
         }
         match child.try_wait() {
             Ok(Some(s)) => break s,
-            Ok(None) => std::thread::sleep(std::time::Duration::from_micros(200)),
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
             Err(e) => return Err(EfError::io("<compiler>", e)),
         }
     };

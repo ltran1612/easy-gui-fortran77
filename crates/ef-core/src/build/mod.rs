@@ -222,9 +222,9 @@ fn build_inner(
             Ok(obj) => objs.push(obj),
             // Stop was pressed while this was compiling, so `run_capture` killed
             // the child and the non-zero exit is ours to interpret rather than
-            // the user's to read about. Every other step in this function already
-            // checks the flag; this one did not, and it matters more now that the
-            // shim is compiled on every build instead of once per session.
+            // the user's to read about. The compile loop above checks the flag;
+            // this step and the link below did not, and it matters more here now
+            // that the shim is compiled on every build rather than once a session.
             Err(_) if cancel.load(Ordering::Relaxed) => {
                 return Ok(cancelled(all_diags, raw));
             }
@@ -246,6 +246,12 @@ fn build_inner(
 
     let (code, text) = exec::run_capture(cmd, COMPILER_OUTPUT_CAP, cancel)?;
     raw.push_str(&text);
+    // Stop pressed while linking. Without this the killed linker's non-zero exit
+    // reads as a link failure, and the user who asked the build to stop is shown
+    // a red "Build failed" with no errors in it.
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(cancelled(all_diags, raw));
+    }
     let mut link_diags = diagnostics::parse(&text);
     diagnostics::rewrite_names(&mut link_diags, &staging.sources);
     if !link_diags.is_empty() {
