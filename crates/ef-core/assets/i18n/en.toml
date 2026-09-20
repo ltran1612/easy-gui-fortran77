@@ -114,6 +114,9 @@
 
 "config.recovered" = "Your program list could not be read, so the previous copy was used instead. The unreadable file was kept at {path} in case it is needed."
 "config.started_empty" = "Your program list could not be read and there was no backup, so the list is starting empty. Nothing was deleted: the old file was kept at {path}."
+"config.settings_recovered" = "Your settings could not be read, so the previous copy was used instead. The unreadable file was kept at {path} in case it is needed."
+"config.settings_started_empty" = "Your settings could not be read and there was no backup, so the language and text size have gone back to their starting values. Nothing was deleted: the old file was kept at {path}."
+"config.settings_too_new" = "Your settings were written by a newer version of this application (format {found}). They are being left alone rather than overwritten, so changes to them will not be saved. Please update the application."
 "config.too_new" = "Your program list was written by a newer version of this application (format {found}). It is being left alone rather than overwritten, so no changes will be saved. Please update the application."
 "lib.reject.dos_era_runtime" = "This is the old compiler's own runtime library, from the DOS era. You do not need it: this application brings its own Fortran compiler, which already includes everything this file provided. Remove it from the list and build with just your source files."
 "src.unusable_title" = "“{name}” is not a Fortran program"

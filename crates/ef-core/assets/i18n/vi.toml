@@ -114,6 +114,9 @@
 
 "config.recovered" = "Không đọc được danh sách chương trình của bạn, nên bản lưu trước đó đã được dùng thay thế. Tệp không đọc được vẫn được giữ tại {path} phòng khi cần đến."
 "config.started_empty" = "Không đọc được danh sách chương trình của bạn và cũng không có bản dự phòng, nên danh sách bắt đầu trống. Không có gì bị xoá: tệp cũ vẫn được giữ tại {path}."
+"config.settings_recovered" = "Không đọc được phần cài đặt của bạn, nên ứng dụng dùng bản lưu trước đó. Tệp không đọc được vẫn được giữ lại ở {path} phòng khi cần."
+"config.settings_started_empty" = "Không đọc được phần cài đặt của bạn và cũng không có bản lưu dự phòng, nên ngôn ngữ và cỡ chữ đã trở về giá trị ban đầu. Không có gì bị xoá: tệp cũ vẫn được giữ ở {path}."
+"config.settings_too_new" = "Phần cài đặt của bạn do một phiên bản mới hơn của ứng dụng ghi ra (định dạng {found}). Ứng dụng giữ nguyên tệp đó thay vì ghi đè, nên các thay đổi sẽ không được lưu. Bạn hãy cập nhật ứng dụng."
 "config.too_new" = "Danh sách chương trình của bạn được tạo bởi một phiên bản mới hơn của ứng dụng (định dạng {found}). Ứng dụng sẽ giữ nguyên tệp đó thay vì ghi đè, nên các thay đổi sẽ không được lưu. Bạn nên cập nhật ứng dụng."
 "lib.reject.dos_era_runtime" = "Đây là thư viện chạy kèm của chính trình biên dịch cũ thời DOS. Bạn không cần tệp này: ứng dụng đã có sẵn trình biên dịch Fortran riêng, trong đó đã bao gồm mọi thứ mà tệp này từng cung cấp. Hãy bỏ nó khỏi danh sách và biên dịch chỉ với các tệp mã nguồn của bạn."
 "src.unusable_title" = "“{name}” không phải là chương trình Fortran"

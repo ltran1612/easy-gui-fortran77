@@ -88,6 +88,7 @@ pub struct Store {
     guard: FsGuard,
     /// Set when the on-disk file came from a newer version: we must never clobber it.
     programs_readonly: bool,
+    settings_readonly: bool,
 }
 
 impl Store {
@@ -97,6 +98,7 @@ impl Store {
             paths,
             guard,
             programs_readonly: false,
+            settings_readonly: false,
         })
     }
 
@@ -109,29 +111,49 @@ impl Store {
     pub fn programs_readonly(&self) -> bool {
         self.programs_readonly
     }
+    pub fn settings_readonly(&self) -> bool {
+        self.settings_readonly
+    }
 
     // ------------------------------------------------------------- programs
 
     pub fn load_programs(&mut self) -> Result<(Vec<Program>, LoadNote)> {
         let path = self.paths.programs_file();
-        let Some(bytes) = self.guard.read_app_file(&path)? else {
-            return Ok((Vec::new(), LoadNote::Fresh));
+        let (file, note) = self.load_with_recovery(&path, |b, p| self.parse_programs(b, p))?;
+        self.programs_readonly = matches!(note, LoadNote::TooNew { .. });
+        Ok((file.map(|f| f.programs).unwrap_or_default(), note))
+    }
+
+    /// Read a versioned config file, and survive it being unreadable.
+    ///
+    /// The same four outcomes for both files, which is the point of writing it
+    /// once: there is no file yet; it parses; it was written by a newer version
+    /// and must be left alone rather than overwritten; or it will not parse, in
+    /// which case it is moved aside — never deleted, the user may want it back —
+    /// and the backup `write_file_atomic` left behind is tried in its place.
+    ///
+    /// `None` means nothing was loaded and the caller should start from its own
+    /// defaults. The `LoadNote` says which of the four happened, so the
+    /// interface can tell the user rather than leaving them to notice.
+    fn load_with_recovery<T>(
+        &self,
+        path: &Path,
+        parse: impl Fn(&[u8], &Path) -> Result<T>,
+    ) -> Result<(Option<T>, LoadNote)> {
+        let Some(bytes) = self.guard.read_app_file(path)? else {
+            return Ok((None, LoadNote::Fresh));
         };
-        match self.parse_programs(&bytes, &path) {
-            Ok(f) => Ok((f.programs, LoadNote::Loaded)),
-            Err(EfError::ConfigTooNew { found, .. }) => {
-                self.programs_readonly = true;
-                Ok((Vec::new(), LoadNote::TooNew { found }))
-            }
+        match parse(&bytes, path) {
+            Ok(v) => Ok((Some(v), LoadNote::Loaded)),
+            Err(EfError::ConfigTooNew { found, .. }) => Ok((None, LoadNote::TooNew { found })),
             Err(_) => {
-                // Move the unparseable file aside — never delete it, the user may want it back.
-                let stamped = with_stamp(&path, "corrupt");
-                let _ = self.guard.rename_within_root(&path, &stamped);
-                let bak = backup_path(&path);
+                let stamped = with_stamp(path, "corrupt");
+                let _ = self.guard.rename_within_root(path, &stamped);
+                let bak = backup_path(path);
                 if let Some(bbytes) = self.guard.read_app_file(&bak)? {
-                    if let Ok(f) = self.parse_programs(&bbytes, &bak) {
+                    if let Ok(v) = parse(&bbytes, &bak) {
                         return Ok((
-                            f.programs,
+                            Some(v),
                             LoadNote::RecoveredFromBackup {
                                 corrupt_saved_to: stamped,
                             },
@@ -139,7 +161,7 @@ impl Store {
                     }
                 }
                 Ok((
-                    Vec::new(),
+                    None,
                     LoadNote::StartedEmpty {
                         corrupt_saved_to: stamped,
                     },
@@ -188,16 +210,50 @@ impl Store {
 
     // ------------------------------------------------------------- settings
 
-    pub fn load_settings(&self) -> Result<Settings> {
+    /// Load the settings, saying what happened rather than quietly starting over.
+    ///
+    /// This used to collapse every failure into `Settings::default()`. That is a
+    /// worse outcome than it sounds: it does not lose one setting, it resets the
+    /// interface language and the text size together, on the machine of someone
+    /// who set both deliberately and has no way to know why they changed back.
+    pub fn load_settings(&mut self) -> Result<(Settings, LoadNote)> {
         let path = self.paths.settings_file();
-        let Some(bytes) = self.guard.read_app_file(&path)? else {
-            return Ok(Settings::default());
-        };
-        let text = String::from_utf8_lossy(bytes.as_slice());
-        Ok(toml::from_str(&text).unwrap_or_default())
+        let (settings, note) = self.load_with_recovery(&path, Self::parse_settings)?;
+        self.settings_readonly = matches!(note, LoadNote::TooNew { .. });
+        Ok((settings.unwrap_or_default(), note))
+    }
+
+    fn parse_settings(bytes: &[u8], path: &Path) -> Result<Settings> {
+        let text = String::from_utf8_lossy(bytes);
+        // The version first, so a newer file never reaches serde. `SETTINGS_SCHEMA`
+        // was written into every settings file from the start and never read back,
+        // which meant the field promised a compatibility check nothing performed.
+        let raw: toml::Value = toml::from_str(&text).map_err(|e| EfError::ConfigParse {
+            path: path.to_path_buf(),
+            source: Box::new(e),
+        })?;
+        let found = raw
+            .get("schema_version")
+            .and_then(|v| v.as_integer())
+            .unwrap_or(SETTINGS_SCHEMA as i64) as u32;
+        if found > SETTINGS_SCHEMA {
+            return Err(EfError::ConfigTooNew {
+                path: path.to_path_buf(),
+                found,
+                supported: SETTINGS_SCHEMA,
+            });
+        }
+        let s: Settings = raw.try_into().map_err(|e| EfError::ConfigParse {
+            path: path.to_path_buf(),
+            source: Box::new(e),
+        })?;
+        Ok(migrate_settings(s, found))
     }
 
     pub fn save_settings(&self, s: &Settings) -> Result<()> {
+        if self.settings_readonly {
+            return Ok(()); // refuse to overwrite a newer-schema file
+        }
         let text = toml::to_string_pretty(s)?;
         self.guard
             .write_file_atomic(&self.paths.settings_file(), text.as_bytes())
@@ -224,6 +280,15 @@ fn migrate_programs(mut f: ProgramsFile, from: u32) -> ProgramsFile {
     ProgramsFile {
         schema_version: PROGRAMS_SCHEMA,
         ..f
+    }
+}
+
+fn migrate_settings(s: Settings, _from: u32) -> Settings {
+    // Only schema 1 exists so far. Future migrations chain here, the way
+    // `migrate_programs` does — the point of reading the version at all.
+    Settings {
+        schema_version: SETTINGS_SCHEMA,
+        ..s
     }
 }
 
@@ -311,6 +376,66 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_settings_fall_back_to_the_backup_and_say_so() {
+        // Previously any parse failure here returned `Settings::default()` with
+        // nothing said, which resets the language and the text size together.
+        let (_td, mut s) = store();
+        s.save_settings(&Settings {
+            language: Lang::En,
+            zoom: 1.5,
+            ..Default::default()
+        })
+        .unwrap();
+        // A second save is what rotates the first copy to `.bak`.
+        s.save_settings(&Settings {
+            language: Lang::En,
+            zoom: 1.75,
+            ..Default::default()
+        })
+        .unwrap();
+
+        std::fs::write(s.paths().settings_file(), "not toml {{{").unwrap();
+        let (back, note) = s.load_settings().unwrap();
+        match note {
+            LoadNote::RecoveredFromBackup { corrupt_saved_to } => {
+                assert!(
+                    corrupt_saved_to.exists(),
+                    "the unreadable file must be kept"
+                );
+                assert_eq!(back.language, Lang::En, "the language must come back");
+                assert!((back.zoom - 1.5).abs() < f32::EPSILON, "got {}", back.zoom);
+            }
+            other => panic!("expected recovery from backup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn settings_from_a_newer_version_are_reported_and_left_alone() {
+        // The version field was written into every settings file from the start
+        // and never read back. Now it means something.
+        let (td, mut s) = store();
+        let path = AppPaths::under(td.path()).settings_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let written = "schema_version = 99\nlanguage = \"en\"\n";
+        std::fs::write(&path, written).unwrap();
+
+        let (back, note) = s.load_settings().unwrap();
+        assert!(
+            matches!(note, LoadNote::TooNew { found: 99 }),
+            "got {note:?}"
+        );
+        assert_eq!(back.language, Lang::default(), "nothing should be loaded");
+
+        // And saving must not overwrite it.
+        s.save_settings(&Settings::default()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            written,
+            "a newer settings file must survive a save"
+        );
+    }
+
+    #[test]
     fn a_newer_schema_is_never_overwritten() {
         let (td, mut s) = store();
         let path = AppPaths::under(td.path()).programs_file();
@@ -357,7 +482,7 @@ mod tests {
         // to ignore would not just drop that one setting -- it would silently
         // reset the language back to the locale guess and the zoom back to
         // 1.15, on a machine where someone had deliberately set both.
-        let (td, s) = store();
+        let (td, mut s) = store();
         let path = AppPaths::under(td.path()).settings_file();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(
@@ -366,7 +491,7 @@ mod tests {
         )
         .unwrap();
 
-        let back = s.load_settings().unwrap();
+        let (back, _) = s.load_settings().unwrap();
         assert_eq!(back.language, Lang::En, "the language must survive");
         assert!(
             (back.zoom - 1.5).abs() < f32::EPSILON,
@@ -377,14 +502,14 @@ mod tests {
 
     #[test]
     fn settings_round_trip() {
-        let (_td, s) = store();
+        let (_td, mut s) = store();
         let st = Settings {
             language: Lang::En,
             zoom: 1.5,
             ..Default::default()
         };
         s.save_settings(&st).unwrap();
-        let back = s.load_settings().unwrap();
+        let (back, _) = s.load_settings().unwrap();
         assert_eq!(back.language, Lang::En);
         assert!((back.zoom - 1.5).abs() < f32::EPSILON);
     }

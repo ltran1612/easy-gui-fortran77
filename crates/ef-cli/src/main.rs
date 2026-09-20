@@ -244,8 +244,8 @@ fn find_toolchain() -> Result<Toolchain> {
     let store_override = AppPaths::resolve()
         .ok()
         .and_then(|p| Store::new(p).ok())
-        .and_then(|s| s.load_settings().ok())
-        .and_then(|s| s.toolchain_override);
+        .and_then(|mut s| s.load_settings().ok())
+        .and_then(|(s, _note)| s.toolchain_override);
     toolchain::discover(store_override.as_deref()).map_err(|e| match e {
         // Nothing shipped and nothing installed: the hint is the useful part.
         ef_core::error::EfError::ToolchainMissing => anyhow::Error::new(e)

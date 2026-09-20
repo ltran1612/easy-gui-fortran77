@@ -120,7 +120,9 @@ impl App {
         let paths = AppPaths::resolve().unwrap_or_else(|_| AppPaths::under(std::env::temp_dir()));
         let mut store = Store::new(paths).expect("the application data directory is not writable");
 
-        let mut settings = store.load_settings().unwrap_or_default();
+        let (mut settings, settings_note) = store
+            .load_settings()
+            .unwrap_or_else(|_| (Settings::default(), LoadNote::Fresh));
         if settings.last_check_utc.is_none() && settings.language == Lang::default() {
             settings.language = Lang::from_locale(sys_locale::get_locale().as_deref());
         }
@@ -140,26 +142,41 @@ impl App {
             .load_programs()
             .unwrap_or_else(|_| (Vec::new(), LoadNote::Fresh));
         let lang = settings.language;
-        let mut banner = match &note {
-            LoadNote::RecoveredFromBackup { corrupt_saved_to } => Some((
-                tr!(
-                    lang,
-                    "config.recovered",
-                    path = text::display_path(corrupt_saved_to)
-                ),
-                true,
+        // The two files fail independently, so both are reported. Losing the
+        // settings and the program list in one startup is rare, but being told
+        // about only one of them would leave the user hunting for the other.
+        let mut problems: Vec<String> = Vec::new();
+        match &settings_note {
+            LoadNote::RecoveredFromBackup { corrupt_saved_to } => problems.push(tr!(
+                lang,
+                "config.settings_recovered",
+                path = text::display_path(corrupt_saved_to)
             )),
-            LoadNote::StartedEmpty { corrupt_saved_to } => Some((
-                tr!(
-                    lang,
-                    "config.started_empty",
-                    path = text::display_path(corrupt_saved_to)
-                ),
-                true,
+            LoadNote::StartedEmpty { corrupt_saved_to } => problems.push(tr!(
+                lang,
+                "config.settings_started_empty",
+                path = text::display_path(corrupt_saved_to)
             )),
-            LoadNote::TooNew { found } => Some((tr!(lang, "config.too_new", found = found), true)),
-            _ => None,
-        };
+            LoadNote::TooNew { found } => {
+                problems.push(tr!(lang, "config.settings_too_new", found = found))
+            }
+            _ => {}
+        }
+        match &note {
+            LoadNote::RecoveredFromBackup { corrupt_saved_to } => problems.push(tr!(
+                lang,
+                "config.recovered",
+                path = text::display_path(corrupt_saved_to)
+            )),
+            LoadNote::StartedEmpty { corrupt_saved_to } => problems.push(tr!(
+                lang,
+                "config.started_empty",
+                path = text::display_path(corrupt_saved_to)
+            )),
+            LoadNote::TooNew { found } => problems.push(tr!(lang, "config.too_new", found = found)),
+            _ => {}
+        }
+        let mut banner = (!problems.is_empty()).then(|| (problems.join("\n\n"), true));
 
         if no_vietnamese_font {
             banner = Some((
