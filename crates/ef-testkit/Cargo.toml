@@ -22,6 +22,9 @@ path = "src/bin/fake_program.rs"
 workspace = true
 
 [dependencies]
+# The same canonicaliser the application uses, so tests compare paths spelled
+# the way the product spells them.
+dunce.workspace = true
 ef-core.workspace = true
 crossbeam-channel.workspace = true
 sha2.workspace = true

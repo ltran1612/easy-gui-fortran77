@@ -106,9 +106,14 @@ fn a_bundled_toolchain_compiles_and_runs_a_real_program() {
 
     let tc = Toolchain::from_bundle(&bundle_root).unwrap();
     assert_eq!(tc.id().kind, ToolchainKind::Bundled);
+    // Against the canonical root: a Windows temp dir arrives as
+    // `C:\Users\RUNNER~1\...` and the bundle resolves it to the long name, so
+    // the raw path is a different spelling of the same directory.
+    let canonical_root = dunce::canonicalize(&bundle_root).unwrap();
     assert!(
-        tc.gfortran().starts_with(&bundle_root),
-        "must use the bundle's own driver"
+        tc.gfortran().starts_with(&canonical_root),
+        "must use the bundle's own driver, got {}",
+        tc.gfortran().display()
     );
     assert!(
         !tc.capabilities().probe_failed,
@@ -210,7 +215,10 @@ fn a_bundles_flags_actually_reach_the_compiler_on_both_compile_and_link() {
         .lines()
         .filter(|l| !l.contains("-fsyntax-only"))
         .collect();
-    let root = bundle_root.canonicalize().unwrap();
+    // `dunce::canonicalize`, not `Path::canonicalize`: on Windows the latter
+    // returns a `\\?\` verbatim path, and the bundle does not, so every
+    // comparison below would be against a prefix the product never emits.
+    let root = dunce::canonicalize(&bundle_root).unwrap();
     let sysroot = format!("--sysroot={}/sysroot", root.display());
 
     let compile = lines
