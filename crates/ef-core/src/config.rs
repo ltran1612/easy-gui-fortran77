@@ -12,7 +12,7 @@ use crate::project::Program;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const PROGRAMS_SCHEMA: u32 = 1;
+pub const PROGRAMS_SCHEMA: u32 = 2;
 pub const SETTINGS_SCHEMA: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,8 +210,23 @@ impl Store {
     }
 }
 
-fn migrate_programs(f: ProgramsFile, _from: u32) -> ProgramsFile {
-    // Only schema 1 exists so far. Future migrations chain here.
+fn migrate_programs(mut f: ProgramsFile, from: u32) -> ProgramsFile {
+    // 1 -> 2: `keep_window_open` became true by default.
+    //
+    // The field serialises unconditionally, so every program saved by 0.1.4 or
+    // 0.1.5 carries an explicit `false` that the new default cannot reach. Those
+    // two releases are the only ones that ever wrote it, and in both it was off
+    // with no way to have chosen otherwise before saving -- so a stored `false`
+    // from schema 1 records the old default, not a decision, and turning it on
+    // overrides nobody.
+    //
+    // That reasoning expires here. A later migration must not assume the same:
+    // from now on a stored value is a choice, and choices are kept.
+    if from < 2 {
+        for p in &mut f.programs {
+            p.options.keep_window_open = true;
+        }
+    }
     ProgramsFile {
         schema_version: PROGRAMS_SCHEMA,
         ..f
@@ -277,6 +292,34 @@ mod tests {
         let (back, note) = s.load_programs().unwrap();
         assert_eq!(note, LoadNote::Loaded);
         assert_eq!(back[0].name, "X");
+    }
+
+    #[test]
+    fn schema_1_gets_the_window_kept_open_but_a_later_choice_is_kept() {
+        // The 1 -> 2 migration. A program saved by 0.1.4 or 0.1.5 carries an
+        // explicit `keep_window_open = false` that is the old default rather
+        // than a decision, so it is turned on.
+        let (td, mut s) = store();
+        let path = AppPaths::under(td.path()).programs_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let old = "schema_version = 1\n\n[[program]]\nid = \"abc\"\nname = \"X\"\n\n\
+                   [program.options]\nkeep_window_open = false\n";
+        std::fs::write(&path, old).unwrap();
+        let (back, _) = s.load_programs().unwrap();
+        assert!(
+            back[0].options.keep_window_open,
+            "a schema 1 program should come back with the window kept open"
+        );
+
+        // And the migration stops there: once the file says schema 2, `false`
+        // means someone turned it off, and loading must not undo that.
+        let mine = old.replace("schema_version = 1", "schema_version = 2");
+        std::fs::write(&path, mine).unwrap();
+        let (back, _) = s.load_programs().unwrap();
+        assert!(
+            !back[0].options.keep_window_open,
+            "a choice recorded under schema 2 must survive being loaded"
+        );
     }
 
     #[test]

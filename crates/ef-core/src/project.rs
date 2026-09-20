@@ -94,8 +94,17 @@ pub struct BuildOptions {
     pub big_stack: bool,
     /// Link a small shim that waits for a key before the program exits, so a
     /// console window opened by double-clicking does not vanish before it can be
-    /// read. Windows only, and off by default: it changes the link line, and a
-    /// program run from a script must never wait for a key.
+    /// read. Windows only.
+    ///
+    /// On by default. Double-clicking the program in Explorer is what a person
+    /// who has never used a terminal will do, and without this that is a black
+    /// window that flashes and disappears — the results unread, and nothing to
+    /// suggest the program worked at all.
+    ///
+    /// Defaulting it on is safe because the shim asks who owns the console
+    /// rather than assuming: run from a Command Prompt, from a script, or from
+    /// the `.bat` written beside the program, it does not wait. It costs one
+    /// object on the link line and nothing at run time.
     pub keep_window_open: bool,
     /// `-s`: drop the symbol table and debug information from the linked
     /// program. Makes the saved file substantially smaller, at the cost of
@@ -133,7 +142,7 @@ impl Default for BuildOptions {
             default_real8: false,
             big_stack: false,
             strip_symbols: false,
-            keep_window_open: false,
+            keep_window_open: true,
             opt_level: OptLevel::O1,
             preprocess: Preprocess::Never,
             extra_flags: Vec::new(),

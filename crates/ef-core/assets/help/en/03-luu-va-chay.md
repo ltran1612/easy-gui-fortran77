@@ -13,26 +13,23 @@ because it is built in a temporary working folder.
 
 ## How to run it
 
-A Fortran program is a **command-line** program. If you double-click it in
-Windows Explorer, a black window appears, the program runs, and the window
-**closes immediately** — too fast to read the results.
+**Double-click the `.EXE`.** A black window appears, the program runs, and then
+it **waits for you to press Enter** before the window closes, so you have as
+long as you like to read the results.
 
-### The easy way: the `.BAT` file the application saved for you
+That waiting is an option — **Wait for a key before the window closes**, under
+**Advanced options** — and it is on unless you turn it off. It applies only when
+you double-click the program. Started from a Command Prompt or from a `.BAT`, the
+program finishes and exits as usual, because the window it is running in was not
+going anywhere.
+
+### The `.BAT` file the application saved for you
 
 When you save a program, the application saves a `.BAT` file of the same name
-right beside it. **Double-click that `.BAT` instead of the `.EXE`.** The window
-stays open after the program finishes, and you can type in data when the program
-asks for it.
+right beside it. Double-clicking that does the same job, and keeps working even
+if you ever turn the waiting off.
 
 If you would rather not have that file, turn the option off in **Settings**.
-
-### Or: let the program wait by itself
-
-**Advanced options** has **Wait for a key before the window closes**. Turn it on
-and the `.EXE` itself waits for Enter, so there is one file and no `.BAT` at all.
-
-It only waits when you double-click it. Started from a Command Prompt or from
-another `.BAT`, it finishes and exits as usual.
 
 ### The other way: open a Command Prompt in the folder
 

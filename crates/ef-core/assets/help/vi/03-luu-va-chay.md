@@ -14,26 +14,23 @@ ra trong thư mục làm việc tạm thời.
 
 ## Cách chạy chương trình
 
-Chương trình Fortran là chương trình **dòng lệnh**. Nếu bạn bấm đúp vào nó trong
-Windows Explorer, một cửa sổ đen sẽ hiện ra, chạy xong rồi **đóng lại ngay lập
-tức** — bạn sẽ không kịp đọc kết quả.
+**Bấm đúp vào tệp `.EXE`.** Một cửa sổ đen hiện ra, chương trình chạy, rồi
+**chờ bạn nhấn Enter** mới đóng lại, nên bạn có bao nhiêu thời gian tuỳ ý để đọc
+kết quả.
 
-### Cách dễ nhất: dùng tệp `.BAT` mà ứng dụng đã tạo sẵn
+Việc chờ này là một tuỳ chọn — **Chờ nhấn phím trước khi đóng cửa sổ** trong
+**Tuỳ chọn nâng cao** — và nó được bật sẵn, trừ khi bạn tự tắt đi. Nó chỉ áp
+dụng khi bạn bấm đúp vào chương trình. Nếu chạy từ Command Prompt hoặc từ một
+tệp `.BAT` thì chương trình chạy xong là xong, không chờ gì cả, vì cửa sổ đó vốn
+không tự đóng.
+
+### Tệp `.BAT` mà ứng dụng đã tạo sẵn
 
 Khi lưu chương trình, ứng dụng lưu kèm một tệp `.BAT` cùng tên ngay bên cạnh.
-**Hãy bấm đúp vào tệp `.BAT` đó** thay vì vào tệp `.EXE`. Cửa sổ sẽ ở lại sau khi
-chương trình chạy xong, và bạn nhập được số liệu khi chương trình yêu cầu.
+Bấm đúp vào tệp đó cũng cho kết quả tương tự, và vẫn dùng được kể cả khi sau này
+bạn tắt tuỳ chọn chờ nhấn phím.
 
 Nếu bạn không muốn tạo tệp này, hãy tắt tuỳ chọn trong **Cài đặt**.
-
-### Hoặc: để chính chương trình tự chờ
-
-Trong **Tuỳ chọn nâng cao** có mục **Chờ nhấn phím trước khi đóng cửa sổ**. Bật
-nó lên thì chính tệp `.EXE` sẽ chờ bạn nhấn Enter, nên bạn chỉ cần một tệp duy
-nhất, không cần tệp `.BAT` nữa.
-
-Chương trình chỉ chờ khi bạn bấm đúp vào nó. Nếu chạy từ Command Prompt hoặc từ
-một tệp `.BAT` khác thì nó chạy xong là xong, không chờ gì cả.
 
 ### Cách khác: mở Command Prompt trong thư mục chứa chương trình
 

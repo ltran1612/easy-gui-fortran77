@@ -522,20 +522,32 @@ mod tests {
     }
 
     #[test]
-    fn the_window_option_is_off_and_changes_nothing_unless_asked_for() {
-        // The overwhelmingly common case. An option that alters the link line
-        // by default would put a wrap on every program anyone ever builds.
+    fn the_window_option_is_on_by_default_and_can_still_be_turned_off() {
+        // It is on because double-clicking is what the people this is for do,
+        // and a window that vanishes reads as a program that did not run. Both
+        // directions are asserted: the default reaches the link line, and a
+        // person who turns it off gets a link line with no trace of it.
         let layout = WorkLayout::new(PathBuf::from("/work/build-1"));
-        let a = strings(&link_args(
-            &FlagCapabilities::optimistic(),
-            &[],
-            &BuildOptions::default(),
-            &[],
-            &[],
-            &layout,
-            ".exe",
-        ));
-        assert!(!a.iter().any(|s| s.contains("--wrap")), "{a:?}");
+        let wrap = |o: &BuildOptions| {
+            strings(&link_args(
+                &FlagCapabilities::optimistic(),
+                &[],
+                o,
+                &[],
+                &[],
+                &layout,
+                ".exe",
+            ))
+        };
+
+        let on = wrap(&BuildOptions::default());
+        assert!(on.contains(&"-Wl,--wrap=exit".to_string()), "{on:?}");
+
+        let off = wrap(&BuildOptions {
+            keep_window_open: false,
+            ..Default::default()
+        });
+        assert!(!off.iter().any(|s| s.contains("--wrap")), "{off:?}");
     }
 
     #[test]

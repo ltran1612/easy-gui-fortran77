@@ -33,7 +33,7 @@ OPTIONS:
     --no-static      disable static local storage and zero-init
     --preprocess     run the C preprocessor (rarely wanted)
     --strip          strip the saved program (smaller file, no debug info)
-    --keep-open      wait for a key before the program exits (Windows only)
+    --no-keep-open   let the program exit without waiting for a key (Windows only)
 ";
 
 struct Opts {
@@ -45,7 +45,7 @@ struct Opts {
     no_static: bool,
     preprocess: bool,
     strip: bool,
-    keep_open: bool,
+    no_keep_open: bool,
     libs: Vec<PathBuf>,
 }
 
@@ -103,7 +103,7 @@ fn parse(args: &[String]) -> Result<Opts> {
         no_static: false,
         preprocess: false,
         strip: false,
-        keep_open: false,
+        no_keep_open: false,
         libs: Vec::new(),
     };
     let mut it = args.iter();
@@ -115,7 +115,7 @@ fn parse(args: &[String]) -> Result<Opts> {
             "--no-static" => o.no_static = true,
             "--preprocess" => o.preprocess = true,
             "--strip" => o.strip = true,
-            "--keep-open" => o.keep_open = true,
+            "--no-keep-open" => o.no_keep_open = true,
             "--out" => o.out = Some(PathBuf::from(it.next().context("--out needs a path")?)),
             "--lib" => o
                 .libs
@@ -270,7 +270,9 @@ fn program_from(o: &Opts) -> Result<Program> {
         p.options.preprocess = Preprocess::Always;
     }
     p.options.strip_symbols = o.strip;
-    p.options.keep_window_open = o.keep_open;
+    if o.no_keep_open {
+        p.options.keep_window_open = false;
+    }
     for l in &o.libs {
         p.add_library(l)
             .with_context(|| format!("adding library {}", l.display()))?;
