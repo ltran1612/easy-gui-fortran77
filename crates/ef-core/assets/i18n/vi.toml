@@ -96,6 +96,7 @@
 "options.strip" = "Thu gọn tệp chương trình (bỏ thông tin gỡ lỗi)"
 "toolchain.integrity.blocked" = "Trình biên dịch đi kèm không vượt qua bước kiểm tra toàn vẹn."
 "toolchain.integrity.missing" = "Một số tệp của trình biên dịch đã biến mất — thường do phần mềm diệt virus xoá nhầm. Xem mục hướng dẫn về cảnh báo bảo mật."
+"toolchain.integrity.unattested" = "Bản ứng dụng này không kiểm tra được trình biên dịch đi kèm, nên sẽ không dùng nó. Bản cài đặt bị thiếu. Bạn hãy cài lại từ nguồn chính thức."
 "toolchain.integrity.changed" = "Một số tệp của trình biên dịch đã bị thay đổi. Hãy cài đặt lại ứng dụng từ nguồn chính thức."
 "toolchain.integrity.unreadable" = "Không đọc được một số tệp của trình biên dịch. Hãy kiểm tra quyền truy cập hoặc cài đặt lại ứng dụng."
 

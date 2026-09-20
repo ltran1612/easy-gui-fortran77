@@ -96,6 +96,7 @@
 "options.strip" = "Make the program file smaller (remove debug information)"
 "toolchain.integrity.blocked" = "The bundled compiler failed its integrity check."
 "toolchain.integrity.missing" = "Some compiler files have disappeared — usually antivirus software removing them by mistake. See the security-warning topic in the guide."
+"toolchain.integrity.unattested" = "This copy of the application cannot check its own compiler, so it will not use it. The installation is incomplete. Please reinstall from the official source."
 "toolchain.integrity.changed" = "Some compiler files have been altered. Please reinstall the application from the official source."
 "toolchain.integrity.unreadable" = "Some compiler files could not be read. Check permissions, or reinstall the application."
 

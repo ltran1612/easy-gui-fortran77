@@ -54,6 +54,13 @@ pub struct Toolchain {
     /// Present only for a bundled toolchain, which may need to be told where its
     /// own sysroot and startup files live.
     bundle: Option<Bundle>,
+    /// Found beside our own executable, rather than pointed at by a setting or
+    /// an environment variable.
+    ///
+    /// This is what distinguishes the compiler we shipped — which we are
+    /// answerable for and must be able to attest to — from one a developer or a
+    /// test aimed us at, which we can say nothing about and do not pretend to.
+    shipped: bool,
 }
 
 impl Toolchain {
@@ -129,6 +136,17 @@ impl Toolchain {
     pub fn verify_integrity(&self, manifest: &manifest::Manifest) -> manifest::VerifyReport {
         match (&self.bundle, manifest.is_empty()) {
             (Some(b), false) => manifest.verify(&b.root),
+            // A compiler we shipped, and nothing to check it against. That is
+            // not a pass: the manifest is written by the toolchain fetch and
+            // baked in at compile time, so an empty one here means this binary
+            // was built before its own compiler was fetched and cannot tell
+            // whether the compiler beside it is the one we meant to ship.
+            (Some(_), true) if self.shipped => manifest::VerifyReport {
+                unattested: true,
+                ..Default::default()
+            },
+            // A bundle someone pointed us at, or no bundle at all. Neither is
+            // ours to vouch for.
             _ => manifest::VerifyReport::default(),
         }
     }
@@ -157,6 +175,7 @@ impl Toolchain {
             },
             gfortran: path,
             caps,
+            shipped: false,
             bundle: None,
         })
     }
@@ -193,6 +212,7 @@ impl Toolchain {
                 path: b.gfortran.clone(),
             },
             gfortran: b.gfortran.clone(),
+            shipped: false,
             caps,
             bundle: Some(b),
         })
@@ -377,7 +397,12 @@ fn bundled_toolchain(roots: &[PathBuf]) -> Option<Result<Toolchain>> {
     for root in roots {
         if looks_like_a_bundle(root) {
             match Toolchain::from_bundle(root) {
-                Ok(tc) => return Some(Ok(tc)),
+                Ok(mut tc) => {
+                    // Found beside our own executable: this is the compiler we
+                    // shipped, so this build is answerable for it.
+                    tc.shipped = true;
+                    return Some(Ok(tc));
+                }
                 Err(e) => {
                     tracing::warn!("bundle at {} will not load: {e}", root.display());
                     damaged.get_or_insert(e);
@@ -443,6 +468,7 @@ mod tests {
             },
             gfortran: "/usr/bin/gfortran".into(),
             caps: FlagCapabilities::optimistic(),
+            shipped: false,
             bundle: None,
         }
     }
@@ -457,6 +483,7 @@ mod tests {
             },
             gfortran: b.gfortran.clone(),
             caps: FlagCapabilities::optimistic(),
+            shipped: false,
             bundle: Some(b),
         }
     }
@@ -630,6 +657,40 @@ mod tests {
         let td = tempfile::tempdir().unwrap();
         std::fs::write(td.path().join(bundle::BUNDLE_FILE), "id = \"x\"\n").unwrap();
         assert!(looks_like_a_bundle(td.path()));
+    }
+
+    #[test]
+    fn a_shipped_compiler_with_nothing_to_check_it_against_does_not_pass() {
+        // The quiet failure this exists to stop: a release built before its own
+        // compiler was fetched embeds the placeholder manifest, so there is
+        // nothing to verify against. Reporting that as "verified" would look
+        // exactly like success while checking nothing at all.
+        let td = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(td.path().join("bin")).unwrap();
+        std::fs::write(td.path().join("bin/gfortran"), b"#!/bin/sh\n").unwrap();
+        let mut tc = bundled(bundle::BundleDescriptor::default(), td.path());
+
+        let empty = manifest::Manifest::parse("# placeholder, no entries\n");
+        assert!(empty.is_empty(), "the placeholder must parse to nothing");
+
+        // Pointed at by a test or a developer: not ours to vouch for, so this
+        // stays a pass and the corpus keeps working against a fetched bundle.
+        tc.shipped = false;
+        assert!(
+            tc.verify_integrity(&empty).is_ok(),
+            "a bundle we were merely pointed at is not ours to attest to"
+        );
+
+        // Shipped beside our own executable: we are answerable for it.
+        tc.shipped = true;
+        let report = tc.verify_integrity(&empty);
+        assert!(!report.is_ok(), "a shipped compiler must be attested");
+        assert!(report.unattested);
+        assert_eq!(
+            report.explanation_key(),
+            Some("toolchain.integrity.unattested"),
+            "and the user must be told which kind of failure this is"
+        );
     }
 
     #[test]

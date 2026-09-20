@@ -304,6 +304,19 @@ fn do_build(o: &Opts) -> Result<(AppPaths, build::BuildOutcome, WorkLayout)> {
     let paths = AppPaths::resolve()?;
     let guard = FsGuard::new(paths.write_roots().to_vec())?;
     let tc = find_toolchain()?;
+
+    // The same check the window makes before its first build, and for the same
+    // reason: a compiler that cannot be shown to be the one we shipped is not
+    // used at all. Doing it only in `doctor` meant the command that actually
+    // runs the compiler was the one command that never looked.
+    let report = tc.verify_integrity(&Manifest::parse(TOOLCHAIN_MANIFEST));
+    if !report.is_ok() {
+        bail!(
+            "the bundled compiler failed its integrity check, so it was not used\n{}",
+            report.detail()
+        );
+    }
+
     let layout = WorkLayout::new(paths.build_dir(1));
     let cancel = AtomicBool::new(false);
     let program = program_from(o)?;
