@@ -269,6 +269,19 @@ GCC_EXEC_PREFIX = "${ROOT}/lib/gcc/"
         }
     }
 
+    /// An absolute path on whichever platform the test is running on.
+    ///
+    /// `/opt/a` is absolute on Unix and *relative* on Windows, where it has no
+    /// drive letter — so `absolutize` prepended the working directory and the
+    /// substitution assertions compared against a path that was never produced.
+    fn abs(tail: &str) -> PathBuf {
+        if cfg!(windows) {
+            PathBuf::from(format!("C:\\{}", tail.replace('/', "\\")))
+        } else {
+            PathBuf::from(format!("/{tail}"))
+        }
+    }
+
     #[test]
     fn a_bundle_is_relocatable_because_flags_resolve_at_load_time() {
         let d = BundleDescriptor {
@@ -276,15 +289,18 @@ GCC_EXEC_PREFIX = "${ROOT}/lib/gcc/"
             compile_flags: vec!["--sysroot=${ROOT}/sysroot".into()],
             ..Default::default()
         };
-        let a = Bundle::resolve(Path::new("/opt/a"), d.clone()).unwrap();
-        let b = Bundle::resolve(Path::new("/home/user/.local/b"), d).unwrap();
+        let (ra, rb) = (abs("opt/a"), abs("home/user/.local/b"));
+        let a = Bundle::resolve(&ra, d.clone()).unwrap();
+        let b = Bundle::resolve(&rb, d).unwrap();
         assert_ne!(a.compile_flags, b.compile_flags);
-        assert!(a.compile_flags[0]
-            .to_string_lossy()
-            .starts_with("--sysroot=/opt/a"));
-        assert!(b.compile_flags[0]
-            .to_string_lossy()
-            .starts_with("--sysroot=/home/user/.local/b"));
+        for (bundle, root) in [(&a, &ra), (&b, &rb)] {
+            let want = format!("--sysroot={}", root.display());
+            assert!(
+                bundle.compile_flags[0].to_string_lossy().starts_with(&want),
+                "expected {want:?}, got {:?}",
+                bundle.compile_flags[0]
+            );
+        }
     }
 
     #[test]
@@ -298,7 +314,12 @@ GCC_EXEC_PREFIX = "${ROOT}/lib/gcc/"
         let b = Bundle::load(td.path()).unwrap().unwrap();
         assert!(b.compile_flags.is_empty());
         assert!(b.link_flags.is_empty());
-        assert_eq!(b.path_dirs, vec![td.path().join("bin")]);
+        // Against the canonical root, because `resolve` canonicalizes: on Windows
+        // a temp dir arrives as `C:\Users\RUNNER~1\...` and comes back with the
+        // 8.3 name expanded, so comparing with the raw path compares two spellings
+        // of the same directory.
+        let root = dunce::canonicalize(td.path()).unwrap();
+        assert_eq!(b.path_dirs, vec![root.join("bin")]);
         assert!(b.gfortran.ends_with(default_gfortran_path()));
     }
 

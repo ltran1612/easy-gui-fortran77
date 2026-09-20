@@ -456,7 +456,13 @@ mod tests {
 
     #[test]
     fn a_bundle_contributes_its_sysroot_flags_and_path_directories() {
-        let root = Path::new("/opt/ef77/toolchain");
+        // Absolute on this platform: a bare "/opt/..." is relative on Windows.
+        let root = if cfg!(windows) {
+            PathBuf::from("C:\\opt\\ef77\\toolchain")
+        } else {
+            PathBuf::from("/opt/ef77/toolchain")
+        };
+        let root = root.as_path();
         let tc = bundled(
             bundle::BundleDescriptor {
                 id: "linux-relocatable".into(),
@@ -469,7 +475,10 @@ mod tests {
         );
         assert_eq!(
             tc.compile_flags(),
-            [OsString::from("--sysroot=/opt/ef77/toolchain/sysroot")]
+            [OsString::from(format!(
+                "--sysroot={}/sysroot",
+                root.display()
+            ))]
         );
         assert_eq!(tc.link_flags().len(), 2);
 

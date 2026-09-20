@@ -345,8 +345,28 @@ pub fn run(args: &[String]) -> Result<()> {
 /// already look like ours.
 ///
 /// A previous bundle is recognised by its `bundle.toml`. An empty or absent
-/// directory is fine. Anything else is left alone and reported, because the
-/// alternative is a recursive delete of whatever the caller happened to type.
+/// directory is fine, and so is anything under the repository's own `target/`,
+/// which is build output by definition. Anything else is left alone and
+/// reported, because the alternative is a recursive delete of whatever the
+/// caller happened to type — `--out ~` should not cost someone their home
+/// directory.
+///
+/// The `target/` exemption is not a loosening for convenience: CI restores a
+/// pruned `target/` from a cache, which can leave a partial bundle with no
+/// `bundle.toml` in it. Refusing that means the recipe can never be rebuilt on a
+/// runner that has a cache, which is every runner after the first.
+/// Is this path inside the repository's own `target/`?
+///
+/// Compared after making both absolute, so neither a relative `--out` nor a
+/// symlinked checkout can make an outside path look inside one.
+fn is_inside_build_output(dir: &Path) -> bool {
+    let target = crate::repo_root().join("target");
+    let (Ok(dir), Ok(target)) = (dir.canonicalize(), target.canonicalize()) else {
+        return false;
+    };
+    dir.starts_with(target)
+}
+
 fn clear_output_dir(dir: &Path) -> Result<()> {
     if !dir.exists() {
         fs::create_dir_all(dir)?;
@@ -355,7 +375,7 @@ fn clear_output_dir(dir: &Path) -> Result<()> {
     if !dir.is_dir() {
         bail!("{} exists and is not a directory", dir.display());
     }
-    let ours = dir.join("bundle.toml").is_file();
+    let ours = dir.join("bundle.toml").is_file() || is_inside_build_output(dir);
     let empty = fs::read_dir(dir)?.next().is_none();
     if !ours && !empty {
         bail!(
