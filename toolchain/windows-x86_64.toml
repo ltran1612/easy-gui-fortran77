@@ -269,3 +269,64 @@ drop = [
   "*/libstdc++-6.dll",
 
 ]
+
+# ---------------------------------------------------------------------------
+# Corresponding Source (GPLv3 §6)
+#
+# Shipping GCC and binutils binaries obliges us to offer their source from the
+# same place, for as long as we distribute them. conda-forge does not host
+# tarballs next to its packages, so citing conda-forge would not discharge it:
+# we mirror, and the release workflow publishes the result as an asset on the
+# same GitHub Release as the installer.
+#
+# The GCC and binutils tarballs are the same upstream files the Linux recipe
+# names, at the same versions and with the same checksums — the toolchains are
+# cross-built from identical sources and differ only in their target.
+# ---------------------------------------------------------------------------
+
+[[source]]
+component = "gcc"
+version = "16.2.0"
+url = "https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.gz"
+sha256 = "071d00a097579e5ef7ce97fc4a9e58e73fd3503c0a013c765c970370a5a53b9b"
+license = "GPL-3.0-or-later WITH GCC-exception-3.1"
+covers = [
+    "gcc_impl_win-64",
+    "gfortran_impl_win-64",
+    "libgcc-devel_win-64",
+    "libgcc",
+    "libgfortran5",
+    "libstdcxx",
+]
+
+[[source]]
+component = "binutils"
+version = "2.46.1"
+url = "https://ftp.gnu.org/gnu/binutils/binutils-2.46.1.tar.bz2"
+sha256 = "324ed40ada2633a28eaa5d104ca5db165fd3cc3162cc1d48a7b7fa9c932da439"
+license = "GPL-3.0-or-later AND GPL-2.0-or-later AND LGPL-3.0-or-later AND LGPL-2.0-or-later"
+covers = ["binutils_impl_win-64", "ld_impl_win-64"]
+
+[[source]]
+component = "mingw-w64"
+version = "12.0.0.r4.gg4f2fc60ca"
+url = "https://github.com/mingw-w64/mingw-w64/tree/g4f2fc60ca"
+license = "Public domain AND BSD-3-Clause AND ZPL-2.1 (see LICENSES/)"
+covers = [
+    "m2w64-sysroot_win-64",
+    "mingw-w64-ucrt-x86_64-crt-git",
+    "mingw-w64-ucrt-x86_64-headers-git",
+    "mingw-w64-ucrt-x86_64-windows-default-manifest",
+    "mingw-w64-ucrt-x86_64-winpthreads-git",
+    "libwinpthread",
+    "ucrt",
+]
+note = "Not GPL, so §6 does not compel this one; mirrored anyway because we ship it. The conda package is a git snapshot four commits past the v12.0.0 release, which is why this names a commit rather than a release tarball."
+
+[[source]]
+component = "conda-forge build recipes"
+version = "ctng-compilers-feedstock, binutils-feedstock, mingw-w64 feedstocks"
+url = "https://github.com/conda-forge/ctng-compilers-feedstock"
+license = "BSD-3-Clause (recipes); the patches carry the licence of what they patch"
+covers = ["all"]
+note = "The build scripts and patches. GPLv3 §1 counts these as Corresponding Source, and conda-forge patches GCC, so the upstream tarball alone is not enough. Archive at the exact commit that built the shipped binaries."

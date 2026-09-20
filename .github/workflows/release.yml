@@ -8,8 +8,8 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to build (without the leading v)"
+      tag:
+        description: "Tag to publish, e.g. v0.1.0. Must match the workspace version."
         required: true
 
 permissions:
@@ -19,8 +19,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Resolve the version once, here, and refuse a tag that disagrees with the
+  # workspace. Getting this wrong ships a `v0.2.0` release full of files that
+  # call themselves 0.1.0, and the mismatch is only visible after publishing.
+  plan:
+    name: Resolve and check the version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          # The workspace version is the one that ends up in file names and in
+          # the installer, so it is the authority.
+          declared=$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
+                     | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          echo "tag=$tag"           >> "$GITHUB_OUTPUT"
+          echo "version=$declared"  >> "$GITHUB_OUTPUT"
+          if [ "$version" != "$declared" ]; then
+            echo "::error::tag $tag implies version $version, but Cargo.toml declares $declared"
+            exit 1
+          fi
+          echo "publishing $tag (workspace version $declared)"
+
   package:
     name: Package (${{ matrix.target }})
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
@@ -37,9 +66,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      # The packages are pinned by SHA-256 in the recipe, so a cache hit is
+      # exactly the same bytes a fresh download would be. Keyed on the recipe so
+      # changing a pin fetches again.
+      - name: Cache the pinned toolchain downloads
+        uses: actions/cache@v4
+        with:
+          path: target/toolchain-cache
+          key: toolchain-${{ matrix.target }}-${{ hashFiles(format('toolchain/{0}.toml', matrix.target)) }}
+
       # Order matters: the fetch writes the integrity manifest, and the build
       # embeds it. Building first would ship a binary that cannot verify its own
-      # toolchain.
+      # toolchain — and the failure is silent, a "development build" that skips
+      # verification rather than an error.
       - name: Build the toolchain bundle from the pinned recipe
         run: cargo xtask fetch-toolchain --target ${{ matrix.target }}
 
@@ -50,15 +89,17 @@ jobs:
           EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/${{ matrix.target }}
 
       - name: Build the application
-        run: cargo build --release -p ef-gui
+        run: cargo build --release -p ef-gui -p ef-cli
 
       - name: Package
         run: cargo xtask package --target ${{ matrix.target }}
 
+      # Not a formality: this is the only step that proves the *packaged* tree
+      # matches the manifest the binary embeds. A prune that dropped a file, or a
+      # build that ran before the fetch, both surface here.
       - name: The packaged application must verify its own toolchain
         shell: bash
         run: |
-          cargo build --release -p ef-cli
           dist=$(ls -d target/dist/EasyFortran77-*-${{ matrix.target }})
           cp target/release/ef-cli* "$dist/" 2>/dev/null || true
           cd "$dist" && ./ef-cli doctor | tee /dev/stderr | grep -q "integrity  : ok"
@@ -70,10 +111,9 @@ jobs:
         run: |
           choco install nsis --no-progress -y
           $dist = (Get-ChildItem -Directory target/dist/EasyFortran77-*-windows-x86_64)[0].FullName
-          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
           & "$env:ProgramFiles(x86)\NSIS\makensis.exe" `
-            "/DSRC=$dist" "/DVERSION=$version" `
-            "/DOUT=$PWD\target\dist\EasyFortran77-$version-Setup.exe" `
+            "/DSRC=$dist" "/DVERSION=${{ needs.plan.outputs.version }}" `
+            "/DOUT=$PWD\target\dist\EasyFortran77-${{ needs.plan.outputs.version }}-Setup.exe" `
             packaging\windows\installer.nsi
 
       - uses: actions/upload-artifact@v4
@@ -91,13 +131,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       # Section 6 wants the source available from the same place as the binaries,
-      # so it is published with them rather than pointed at.
+      # so it is published with them rather than pointed at. Both targets: we
+      # ship a Windows GCC as well as a Linux one, and the obligation follows
+      # every binary we distribute, not just the ones built on this runner.
       - name: Gather it
-        run: cargo xtask fetch-sources --target linux-x86_64
+        run: |
+          cargo xtask fetch-sources --target linux-x86_64
+          cargo xtask fetch-sources --target windows-x86_64
       - name: Archive
         run: |
           cd target/corresponding-source
-          tar czf ../dist-corresponding-source.tar.gz linux-x86_64
+          tar czf ../dist-corresponding-source.tar.gz linux-x86_64 windows-x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: corresponding-source
@@ -106,17 +150,34 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [package, corresponding-source]
+    needs: [plan, package, corresponding-source]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Show what is being published
-        run: find artifacts -type f -printf '%10s  %p\n' | sort -k2
+
+      # Flattened so the release assets are not nested under the artifact names
+      # the matrix happened to use, and checksummed so a download can be checked
+      # without trusting the transport.
+      - name: Collect and checksum
+        run: |
+          mkdir -p dist
+          find artifacts -type f -exec cp {} dist/ \;
+          # Removed first and written outside the directory: `sha256sum * >
+          # SHA256SUMS` otherwise lists the file it is creating, if one is
+          # already there.
+          (cd dist && rm -f SHA256SUMS && sha256sum -- *) > SHA256SUMS
+          mv SHA256SUMS dist/
+          ls -l dist
+          cat dist/SHA256SUMS
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          # Explicit, because a workflow_dispatch run has no tag of its own and
+          # the action would otherwise have nothing to attach the release to.
+          tag_name: ${{ needs.plan.outputs.tag }}
+          files: dist/*
           generate_release_notes: true
           body: |
             ## Installing
@@ -130,6 +191,8 @@ jobs:
             `easy-fortran-77`.
 
             The compiler is inside the download. Nothing else to install.
+
+            `SHA256SUMS` lists the checksum of every file here.
 
             ## Source code for the bundled compiler
 
