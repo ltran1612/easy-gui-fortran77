@@ -140,4 +140,4 @@
 "update.download_hint" = "Hãy tải tệp cài đặt về và chạy nó. Tệp này sẽ thay thế phiên bản hiện tại và giữ nguyên các chương trình của bạn."
 "update.failed" = "Không kiểm tra được: {reason}"
 "options.keep_window_open" = "Chờ nhấn phím trước khi đóng cửa sổ"
-"options.keep_window_open_hint" = "Chỉ áp dụng cho Windows. Khi bấm đúp vào chương trình, nó sẽ chờ bạn nhấn Enter để bạn kịp đọc kết quả. Nếu chạy từ Command Prompt hoặc từ tệp .BAT thì nó không chờ."
+"options.keep_window_open_hint" = "Chỉ áp dụng cho Windows. Khi bấm đúp vào chương trình, nó sẽ chờ bạn nhấn Enter để bạn kịp đọc kết quả. Nếu chạy từ Command Prompt hoặc từ một tệp lệnh thì nó không chờ."

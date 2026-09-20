@@ -326,8 +326,7 @@ fn the_built_program_can_be_saved_where_he_chooses_and_still_runs() {
     let exe = build_runnable(&f);
 
     // A name with diacritics and a space, because that is what the user will
-    // type. The launcher script used to carry this case; it is the export's
-    // to carry now.
+    // type, and the export is what has to survive it.
     let dest = f
         .user_files
         .parent()

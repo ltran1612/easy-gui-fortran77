@@ -140,4 +140,4 @@
 "update.download_hint" = "Download the installer and run it. It replaces this version and keeps your programs."
 "update.failed" = "Could not check: {reason}"
 "options.keep_window_open" = "Wait for a key before the window closes"
-"options.keep_window_open_hint" = "Windows only. The program waits for Enter when you double-click it, so you can read the results. Run from a Command Prompt or a .BAT it does not wait."
+"options.keep_window_open_hint" = "Windows only. The program waits for Enter when you double-click it, so you can read the results. Run from a Command Prompt or a script it does not wait."

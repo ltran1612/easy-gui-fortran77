@@ -139,7 +139,7 @@ impl FsGuard {
             self.create_dir_all(parent)?;
         }
         let new = with_suffix(path, ".new");
-        let bak = with_suffix(path, ".bak");
+        let bak = backup_path(path);
 
         {
             let mut f = File::create(&new).map_err(|e| EfError::io(&new, e))?;
@@ -202,9 +202,10 @@ impl FsGuard {
     /// through a symlink, not over anything that looks like source. Creates the
     /// parent if it is missing.
     ///
-    /// Shared, because saving is the one moment this application writes where
-    /// the user pointed rather than where it owns, and both things that land
-    /// there — the program and the script that starts it — deserve the same care.
+    /// Separate from the write it guards because the rules belong to the
+    /// *destination* — anywhere the user pointed a save dialog — rather than to
+    /// any one thing that lands there. Whatever else this application learns to
+    /// hand back goes through here too.
     fn check_export_destination(to: &Path) -> Result<()> {
         if to.is_dir() {
             return Err(EfError::Other(format!(
@@ -242,11 +243,11 @@ impl FsGuard {
     /// Copy a built program to a destination the user chose.
     ///
     /// The only place the application writes outside its own data directory, and
-    /// deliberately so: the point of the tool is to hand back something to
-    /// keep. What keeps it honest is that
-    /// `from` must be inside our work tree — we export only what we built, never
-    /// copy one of the user's own files somewhere else — and that `to` came from
-    /// a save dialog, so nothing lands anywhere unnamed.
+    /// deliberately so: the point of the tool is to hand back something to keep.
+    /// What keeps it honest is that `from` must be inside our work tree — we
+    /// export only what we built, never copy one of the user's own files
+    /// somewhere else — and that `to` came from a save dialog, so nothing lands
+    /// anywhere unnamed.
     pub fn export_built_program(&self, from: &Path, to: &Path) -> Result<()> {
         self.assert_under_write_root(from)?;
         Self::check_export_destination(to)?;
@@ -345,10 +346,21 @@ fn is_fortran_source(p: &Path) -> bool {
         .is_some_and(|e| FORTRAN_EXTENSIONS.contains(&e.as_str()))
 }
 
-fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+pub(crate) fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     let mut s = path.as_os_str().to_os_string();
     s.push(suffix);
     PathBuf::from(s)
+}
+
+/// Where `write_file_atomic` rotates the previous contents.
+///
+/// One function rather than the literal, because two modules depend on the
+/// answer and only one of them writes it: this module rotates the file, and
+/// `config` reads it back when the live file will not parse. Spelled twice, a
+/// change here would leave recovery looking for a file nobody writes any more —
+/// and the recovery test would still pass, because it goes through both halves.
+pub(crate) fn backup_path(path: &Path) -> PathBuf {
+    with_suffix(path, ".bak")
 }
 
 /// Resolve a path for containment checking without requiring it to exist.
@@ -457,7 +469,7 @@ mod tests {
         g.write_file_atomic(&p, b"first").unwrap();
         g.write_file_atomic(&p, b"second").unwrap();
         assert_eq!(fs::read(&p).unwrap(), b"second");
-        assert_eq!(fs::read(with_suffix(&p, ".bak")).unwrap(), b"first");
+        assert_eq!(fs::read(backup_path(&p)).unwrap(), b"first");
         assert!(!with_suffix(&p, ".new").exists());
     }
 

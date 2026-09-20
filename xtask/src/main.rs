@@ -265,15 +265,19 @@ fn check_hygiene() -> Result<()> {
                 }
             }
 
-            // Rule 2: never spawn through a shell.
-            for pat in ["cmd /c", "cmd.exe", "\"sh\"", "sh -c", "/bin/sh"] {
-                if line.contains(pat) && !exempt {
-                    v.push(Violation {
-                        file: rel.clone(),
-                        line: i + 1,
-                        text: line.to_string(),
-                        rule: "never spawn a child through a shell; use Command::arg per argument",
-                    });
+            // Rule 2: never spawn through a shell. No exemption but tests --
+            // the module that used to need one wrote a launcher script, and it
+            // is gone.
+            if !exempt {
+                for pat in ["cmd /c", "cmd.exe", "\"sh\"", "sh -c", "/bin/sh"] {
+                    if line.contains(pat) {
+                        v.push(Violation {
+                            file: rel.clone(),
+                            line: i + 1,
+                            text: line.to_string(),
+                            rule: "never spawn a child through a shell; use Command::arg per argument",
+                        });
+                    }
                 }
             }
 

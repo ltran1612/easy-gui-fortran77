@@ -5,7 +5,7 @@
 //! never cost the user the user's program list.
 
 use crate::error::{EfError, Result};
-use crate::fs_guard::FsGuard;
+use crate::fs_guard::{backup_path, with_suffix, FsGuard};
 use crate::i18n::Lang;
 use crate::paths::AppPaths;
 use crate::project::Program;
@@ -127,7 +127,7 @@ impl Store {
                 // Move the unparseable file aside — never delete it, the user may want it back.
                 let stamped = with_stamp(&path, "corrupt");
                 let _ = self.guard.rename_within_root(&path, &stamped);
-                let bak = append(&path, ".bak");
+                let bak = backup_path(&path);
                 if let Some(bbytes) = self.guard.read_app_file(&bak)? {
                     if let Ok(f) = self.parse_programs(&bbytes, &bak) {
                         return Ok((
@@ -227,15 +227,9 @@ fn migrate_programs(mut f: ProgramsFile, from: u32) -> ProgramsFile {
     }
 }
 
-fn append(p: &Path, suffix: &str) -> PathBuf {
-    let mut s = p.as_os_str().to_os_string();
-    s.push(suffix);
-    PathBuf::from(s)
-}
-
 fn with_stamp(p: &Path, what: &str) -> PathBuf {
     let stamp = crate::project::now_rfc3339().replace([':', '-'], "");
-    append(p, &format!(".{what}-{stamp}"))
+    with_suffix(p, &format!(".{what}-{stamp}"))
 }
 
 #[cfg(test)]

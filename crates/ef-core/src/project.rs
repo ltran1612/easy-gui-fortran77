@@ -102,9 +102,9 @@ pub struct BuildOptions {
     /// suggest the program worked at all.
     ///
     /// Defaulting it on is safe because the shim asks who owns the console
-    /// rather than assuming: run from a Command Prompt, from a script, or from
-    /// the `.bat` written beside the program, it does not wait. It costs one
-    /// object on the link line and nothing at run time.
+    /// rather than assuming: run from a Command Prompt, or from a script that
+    /// owns the window already, it does not wait. It costs one object on the
+    /// link line and nothing at run time.
     pub keep_window_open: bool,
     /// `-s`: drop the symbol table and debug information from the linked
     /// program. Makes the saved file substantially smaller, at the cost of
