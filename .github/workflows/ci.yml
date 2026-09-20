@@ -73,6 +73,10 @@ jobs:
           EF77_REQUIRE_TOOLCHAIN: "1"
           EF77_TOOLCHAIN_BUNDLE: ${{ github.workspace }}/target/toolchain/linux-x86_64
       - name: The integrity manifest must match what was just built
+        # `shell: bash` for the pipefail it brings: the default shell is `bash -e`
+        # without it, so the pipeline's status would be grep's alone and a doctor
+        # that printed the line and then failed would pass this step.
+        shell: bash
         run: |
           cargo run -p ef-cli -- doctor | tee /dev/stderr | grep -q 'integrity  : ok'
         env:

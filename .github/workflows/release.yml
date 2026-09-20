@@ -12,8 +12,17 @@ on:
         description: "Tag to publish, e.g. v0.1.0. Must match the workspace version."
         required: true
 
+# Read by default; only the job that creates the release gets write. `package`
+# runs third-party build recipes and a `choco install`, and has no business
+# holding a token that can push to the repository.
 permissions:
-  contents: write
+  contents: read
+
+# Two runs for one tag would race on asset upload and leave the release holding
+# a mix of both builds.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -30,21 +39,35 @@ jobs:
       version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - id: v
         shell: bash
+        # Through the environment, never interpolated into the script body: a ref
+        # name may contain `$`, a backtick or a quote, and a dispatch input may
+        # contain anything at all including a newline, which would otherwise let
+        # the caller write extra lines into $GITHUB_OUTPUT.
+        env:
+          RAW_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          tag="${{ github.event.inputs.tag || github.ref_name }}"
-          version="${tag#v}"
-          # The workspace version is the one that ends up in file names and in
-          # the installer, so it is the authority.
-          declared=$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
-                     | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
-          echo "tag=$tag"           >> "$GITHUB_OUTPUT"
-          echo "version=$declared"  >> "$GITHUB_OUTPUT"
-          if [ "$version" != "$declared" ]; then
-            echo "::error::tag $tag implies version $version, but Cargo.toml declares $declared"
+          set -euo pipefail
+          tag="$RAW_TAG"
+          # Shape first. Without this, a dispatch of `0.1.0` publishes under a tag
+          # the `v*` trigger would never produce, and `v0.2.0-rc1` reaches NSIS's
+          # VIProductVersion, which must be four numbers and fails the build.
+          if ! printf '%s' "$tag" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag '$tag' must look like v1.2.3"
             exit 1
           fi
+          # One authority for the version, shared with `cargo xtask package`, so
+          # the installer and the archive can never disagree about their own name.
+          declared=$(cargo run -q -p xtask -- version)
+          if [ "${tag#v}" != "$declared" ]; then
+            echo "::error::tag $tag implies ${tag#v}, but the workspace declares $declared"
+            exit 1
+          fi
+          echo "tag=$tag"          >> "$GITHUB_OUTPUT"
+          echo "version=$declared" >> "$GITHUB_OUTPUT"
           echo "publishing $tag (workspace version $declared)"
 
   package:
@@ -74,6 +97,11 @@ jobs:
         with:
           path: target/toolchain-cache
           key: toolchain-${{ matrix.target }}-${{ hashFiles(format('toolchain/{0}.toml', matrix.target)) }}
+          # The key covers the whole recipe, so editing a licence note in it would
+          # otherwise throw away every pinned download. A prefix restore keeps
+          # them: the packages are SHA-256 pinned, so a stale entry is either the
+          # same bytes or refetched by the checksum check.
+          restore-keys: toolchain-${{ matrix.target }}-
 
       # Order matters: the fetch writes the integrity manifest, and the build
       # embeds it. Building first would ship a binary that cannot verify its own
@@ -100,10 +128,16 @@ jobs:
       - name: The packaged application must verify its own toolchain
         shell: bash
         run: |
+          set -euo pipefail
           dist=$(ls -d target/dist/EasyFortran77-*-${{ matrix.target }})
-          cp target/release/ef-cli* "$dist/" 2>/dev/null || true
-          cd "$dist" && ./ef-cli doctor | tee /dev/stderr | grep -q "integrity  : ok"
-          rm -f ef-cli ef-cli.exe
+          # Named exactly, not globbed: `target/release/ef-cli*` also matches
+          # cargo's `ef-cli.d`, which the cleanup below would not remove, which the
+          # installer would then pack, and which would make the uninstaller's
+          # non-recursive RMDir fail and leave the install directory behind.
+          exe=ef-cli; [ -f "target/release/ef-cli.exe" ] && exe=ef-cli.exe
+          cp "target/release/$exe" "$dist/$exe"
+          ( cd "$dist" && "./$exe" doctor | tee /dev/stderr | grep -q "integrity  : ok" )
+          rm -f "$dist/$exe"
 
       - name: Build the Windows installer
         if: matrix.os == 'windows-latest'
@@ -111,7 +145,11 @@ jobs:
         run: |
           choco install nsis --no-progress -y
           $dist = (Get-ChildItem -Directory target/dist/EasyFortran77-*-windows-x86_64)[0].FullName
-          & "$env:ProgramFiles(x86)\NSIS\makensis.exe" `
+          # `makensis`, not "$env:ProgramFiles(x86)\NSIS\makensis.exe": in a
+          # double-quoted PowerShell string that parses as $env:ProgramFiles
+          # followed by a literal (x86), giving "C:\Program Files(x86)\..." with
+          # no space, which does not exist. choco shims makensis onto PATH.
+          & makensis `
             "/DSRC=$dist" "/DVERSION=${{ needs.plan.outputs.version }}" `
             "/DOUT=$PWD\target\dist\EasyFortran77-${{ needs.plan.outputs.version }}-Setup.exe" `
             packaging\windows\installer.nsi
@@ -126,6 +164,7 @@ jobs:
 
   corresponding-source:
     name: Corresponding Source (GPLv3 §6)
+    needs: plan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,10 +177,22 @@ jobs:
         run: |
           cargo xtask fetch-sources --target linux-x86_64
           cargo xtask fetch-sources --target windows-x86_64
+      # The two targets are cross-built from the same gcc and binutils tarballs, so
+      # half of what was just gathered is a byte-for-byte duplicate. Hard-linking
+      # the copies lets tar store the second as a link rather than another 185 MB.
       - name: Archive
         run: |
+          set -euo pipefail
           cd target/corresponding-source
+          for f in windows-x86_64/*; do
+            twin="linux-x86_64/$(basename "$f")"
+            if [ -f "$twin" ] && cmp -s "$f" "$twin"; then
+              ln -f "$twin" "$f"
+              echo "deduplicated $(basename "$f")"
+            fi
+          done
           tar czf ../dist-corresponding-source.tar.gz linux-x86_64 windows-x86_64
+          ls -l ../dist-corresponding-source.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: corresponding-source
@@ -152,18 +203,20 @@ jobs:
     name: Publish the release
     needs: [plan, package, corresponding-source]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: dist
+          # The action's own flattening, rather than a find|cp that would
+          # silently drop one of any two artifacts sharing a basename.
+          merge-multiple: true
 
-      # Flattened so the release assets are not nested under the artifact names
-      # the matrix happened to use, and checksummed so a download can be checked
-      # without trusting the transport.
-      - name: Collect and checksum
+      # Checksummed so a download can be checked without trusting the transport.
+      - name: Checksum
         run: |
-          mkdir -p dist
-          find artifacts -type f -exec cp {} dist/ \;
+          set -euo pipefail
           # Removed first and written outside the directory: `sha256sum * >
           # SHA256SUMS` otherwise lists the file it is creating, if one is
           # already there.
@@ -177,6 +230,10 @@ jobs:
           # Explicit, because a workflow_dispatch run has no tag of its own and
           # the action would otherwise have nothing to attach the release to.
           tag_name: ${{ needs.plan.outputs.tag }}
+          # Without this a dispatch run creates the tag at the default branch's
+          # head, not at the commit that was built, and the release notes would
+          # describe a different tree from the binaries.
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true
           body: |

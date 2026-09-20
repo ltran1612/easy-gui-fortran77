@@ -18,6 +18,10 @@ fn main() -> Result<()> {
         Some("fetch-toolchain") => fetch::run(&args[1..]),
         Some("fetch-sources") => fetch::sources(&args[1..]),
         Some("package") => package::run(&args[1..]),
+        Some("version") => {
+            println!("{}", package::workspace_version(&repo_root())?);
+            Ok(())
+        }
         Some(other) => bail!("unknown task `{other}`\n\n{USAGE}"),
         None => bail!("{USAGE}"),
     }
@@ -29,6 +33,7 @@ USAGE:
     cargo xtask fetch-toolchain [--target <name>] [--out <dir>] [--offline]
     cargo xtask fetch-sources   [--target <name>] [--out <dir>] [--list]
     cargo xtask package         [--target <name>] [--profile <p>] [--no-archive]
+    cargo xtask version
 ";
 
 struct Violation {

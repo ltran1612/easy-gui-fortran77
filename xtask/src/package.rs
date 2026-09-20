@@ -123,7 +123,13 @@ fn default_target() -> String {
     }
 }
 
-fn workspace_version(root: &Path) -> Result<String> {
+/// The workspace version, and the only place it is read from.
+///
+/// The release workflow names the installer after this, and `package` names the
+/// archive after it. Two parsers would eventually disagree and produce a release
+/// whose files contradict its own tag, so the workflow asks for this one via
+/// `cargo xtask version`.
+pub fn workspace_version(root: &Path) -> Result<String> {
     let text = fs::read_to_string(root.join("Cargo.toml"))?;
     for line in text.lines() {
         if let Some(v) = line.trim().strip_prefix("version = ") {

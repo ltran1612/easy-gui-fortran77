@@ -309,8 +309,9 @@ covers = ["binutils_impl_win-64", "ld_impl_win-64"]
 
 [[source]]
 component = "mingw-w64"
-version = "12.0.0.r4.gg4f2fc60ca"
-url = "https://github.com/mingw-w64/mingw-w64/tree/g4f2fc60ca"
+version = "12.0.0"
+url = "https://downloads.sourceforge.net/project/mingw-w64/mingw-w64/mingw-w64-release/mingw-w64-v12.0.0.tar.bz2"
+sha256 = "cc41898aac4b6e8dd5cffd7331b9d9515b912df4420a3a612b5ea2955bbeed2f"
 license = "Public domain AND BSD-3-Clause AND ZPL-2.1 (see LICENSES/)"
 covers = [
     "m2w64-sysroot_win-64",
@@ -321,7 +322,7 @@ covers = [
     "libwinpthread",
     "ucrt",
 ]
-note = "Not GPL, so §6 does not compel this one; mirrored anyway because we ship it. The conda package is a git snapshot four commits past the v12.0.0 release, which is why this names a commit rather than a release tarball."
+note = "Not GPL, so §6 does not compel this one; mirrored anyway because we ship it. The conda packages are a git snapshot four commits past this release (their version reads 12.0.0.r4.gg4f2fc60ca), so this is the v12.0.0 release tarball plus <https://github.com/mingw-w64/mingw-w64> for the exact tree."
 
 [[source]]
 component = "conda-forge build recipes"
