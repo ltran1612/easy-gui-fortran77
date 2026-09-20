@@ -473,6 +473,31 @@ mod tests {
     }
 
     #[test]
+    fn a_program_saved_before_bounds_checking_existed_gets_it() {
+        // `check_bounds` has never been written to any file, so every program
+        // already saved is missing it — and the container-level `serde(default)`
+        // fills a missing field from `BuildOptions::default()`. That is why this
+        // needed no schema bump, unlike `keep_window_open`, which was written out
+        // explicitly as `false` and so could not be reached that way.
+        let (td, mut s) = store();
+        let path = AppPaths::under(td.path()).programs_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "schema_version = 2\n\n[[program]]\nid = \"a\"\nname = \"Dam\"\n\n\
+             [program.options]\nstatic_storage = true\n",
+        )
+        .unwrap();
+
+        let (back, _) = s.load_programs().unwrap();
+        assert!(
+            back[0].options.check_bounds,
+            "an existing program must pick up the new protection"
+        );
+        assert!(back[0].options.static_storage, "without losing what it had");
+    }
+
+    #[test]
     fn a_setting_that_no_longer_exists_does_not_cost_the_user_the_others() {
         // `create_launcher` was removed once the program learned to wait for a
         // key by itself. Every settings file written before that still names it.

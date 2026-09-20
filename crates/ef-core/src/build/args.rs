@@ -65,6 +65,11 @@ fn dialect_flags(opts: &BuildOptions, caps: &FlagCapabilities, out: &mut Vec<OsS
     if caps.allow_invalid_boz {
         out.push("-fallow-invalid-boz".into());
     }
+    if opts.check_bounds && caps.check_bounds {
+        // Only `bounds`: the other `-fcheck` categories cost far more at run
+        // time and catch things this user's programs do not do.
+        out.push("-fcheck=bounds".into());
+    }
     if opts.big_stack && caps.max_stack_var_size {
         // Windows gives a thread 1 MB of stack by default; a 40 MB local array
         // crashes on entry.
@@ -579,6 +584,45 @@ mod tests {
             "",
         ));
         assert!(!nix.iter().any(|s| s.contains("--wrap")), "{nix:?}");
+    }
+
+    #[test]
+    fn array_bounds_are_checked_by_default_and_can_be_turned_off() {
+        // On by default, unlike every other correctness-affecting flag here,
+        // because the alternative is a wrong number that looks right.
+        let (layout, src) = fixture();
+        let caps = FlagCapabilities::optimistic();
+        let args = |o: &BuildOptions| strings(&compile_args(&caps, &[], o, &src, &layout, &[]));
+
+        let on = args(&BuildOptions::default());
+        assert!(
+            on.contains(&"-fcheck=bounds".to_string()),
+            "bounds checking must be on by default: {on:?}"
+        );
+
+        let off = args(&BuildOptions {
+            check_bounds: false,
+            ..Default::default()
+        });
+        assert!(
+            !off.iter().any(|a| a.starts_with("-fcheck")),
+            "and must leave no trace when turned off: {off:?}"
+        );
+
+        // A compiler too old to know the flag must not be handed it.
+        let ancient = FlagCapabilities {
+            check_bounds: false,
+            ..FlagCapabilities::optimistic()
+        };
+        let a = strings(&compile_args(
+            &ancient,
+            &[],
+            &BuildOptions::default(),
+            &src,
+            &layout,
+            &[],
+        ));
+        assert!(!a.iter().any(|x| x.starts_with("-fcheck")), "{a:?}");
     }
 
     #[test]

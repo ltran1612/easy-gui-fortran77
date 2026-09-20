@@ -92,6 +92,20 @@ pub struct BuildOptions {
     pub default_real8: bool,
     /// Large local arrays overflow the 1 MB Windows stack.
     pub big_stack: bool,
+    /// `-fcheck=bounds`: stop the program when an array index is outside the
+    /// array, instead of reading whatever happens to be next in memory.
+    ///
+    /// On by default, which is a departure from reproducing a 1980s compiler
+    /// exactly, and a deliberate one. Without it, `ARR(7)` on a three-element
+    /// array quietly returns a neighbouring value: not a crash, not a NaN, just
+    /// a plausible number that flows into a result and is believed. For
+    /// engineering arithmetic a program that stops and says "index 7 is outside
+    /// 1 to 3" is worth more than one that prints a confident wrong answer.
+    ///
+    /// It costs nothing at compile time and little at run time for programs of
+    /// this size. It can be turned off for old code that reads past an array on
+    /// purpose -- which does exist, and used to work.
+    pub check_bounds: bool,
     /// Link a small shim that waits for a key before the program exits, so a
     /// console window opened by double-clicking does not vanish before it can be
     /// read. Windows only.
@@ -141,6 +155,7 @@ impl Default for BuildOptions {
             d_lines_as_code: false,
             default_real8: false,
             big_stack: false,
+            check_bounds: true,
             strip_symbols: false,
             keep_window_open: true,
             opt_level: OptLevel::O1,

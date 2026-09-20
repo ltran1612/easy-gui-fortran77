@@ -1242,6 +1242,10 @@ impl App {
                     .checkbox(&mut o.static_storage, tr!(lang, "options.static"))
                     .changed();
                 changed |= ui
+                    .checkbox(&mut o.check_bounds, tr!(lang, "options.bounds"))
+                    .on_hover_text(tr!(lang, "options.bounds_hint"))
+                    .changed();
+                changed |= ui
                     .checkbox(&mut o.d_lines_as_code, tr!(lang, "options.dlines"))
                     .changed();
                 changed |= ui

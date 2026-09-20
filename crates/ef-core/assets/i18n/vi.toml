@@ -65,6 +65,8 @@
 "options.line_length.none" = "Không giới hạn"
 "options.dec" = "Phần mở rộng DEC/Microsoft (STRUCTURE, RECORD, …)"
 "options.static" = "Biến cục bộ tĩnh và khởi tạo bằng 0 (giống trình biên dịch DOS)"
+"options.bounds" = "Dừng lại nếu dùng quá giới hạn của mảng"
+"options.bounds_hint" = "Nên bật. Khi đọc quá phần tử cuối của một mảng, chương trình lấy đúng vùng nhớ nằm kế bên — ra một con số trông hợp lý nhưng sai. Bật mục này thì chương trình dừng lại và báo rõ mảng nào, vị trí nào."
 "options.dlines" = "Coi dòng bắt đầu bằng D là mã lệnh"
 "options.real8" = "Dùng REAL 8 byte"
 "options.bigstack" = "Mảng lớn"

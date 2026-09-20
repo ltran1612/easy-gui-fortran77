@@ -32,3 +32,24 @@ Hãy bật tuỳ chọn *Biến cục bộ tĩnh và khởi tạo bằng 0* (m�
 
 Nếu mã lỗi là tràn ngăn xếp, chương trình có mảng cục bộ quá lớn. Hãy bật tuỳ
 chọn **Mảng lớn**.
+
+## “Index … above upper bound of …”
+
+Chương trình đã dùng tới một vị trí nằm ngoài mảng. Ví dụ nó đọc `SPAN(7)`
+trong khi `SPAN` chỉ có ba phần tử. Thông báo có ghi rõ tên mảng và vị trí.
+
+**Đây là chương trình bị dừng lại có chủ đích, và đó là điều tốt.** Nếu không
+có mục kiểm tra này, chương trình sẽ không dừng: nó lấy đúng vùng nhớ nằm kế
+bên rồi tính tiếp với con số đó — thường là một con số trông rất hợp lý, chẳng
+hạn số 0 ở chỗ đáng lẽ phải là một tải trọng. Kết quả sẽ sai mà không có gì báo
+cho bạn biết.
+
+Nguyên nhân thường gặp là vòng lặp chạy quá một bước, hoặc mảng được khai báo
+nhỏ hơn lượng dữ liệu hiện đang đưa vào.
+
+Nếu bạn có chương trình cũ cố ý đọc quá giới hạn mảng và cần nó chạy y như
+trước, hãy tắt mục **Dừng lại nếu dùng quá giới hạn của mảng** trong **Tuỳ chọn
+nâng cao**.
+
+Tên tệp trong thông báo là bản sao làm việc của ứng dụng, không phải tệp của
+bạn. Tên mảng, vị trí và số dòng mới là những phần đáng quan tâm.

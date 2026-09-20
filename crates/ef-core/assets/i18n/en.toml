@@ -65,6 +65,8 @@
 "options.line_length.none" = "Unlimited"
 "options.dec" = "DEC/Microsoft extensions (STRUCTURE, RECORD, …)"
 "options.static" = "Static, zero-initialised local variables (like DOS compilers)"
+"options.bounds" = "Stop if a list or table is used past its end"
+"options.bounds_hint" = "Recommended. Reading past the end of an array gives whatever happens to be next in memory — a number that looks reasonable and is wrong. With this on, the program stops and says which array and which position instead."
 "options.dlines" = "Treat lines starting with D as code"
 "options.real8" = "Use 8-byte REAL"
 "options.bigstack" = "Large arrays"
