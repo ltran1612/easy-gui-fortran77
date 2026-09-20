@@ -139,3 +139,6 @@
 "update.download" = "Open the download page"
 "update.download_hint" = "Download the installer and run it. It replaces this version and keeps your programs."
 "update.failed" = "Could not check: {reason}"
+"settings.create_launcher" = "Also create a file to run the program"
+"settings.create_launcher_hint" = "Saves a small .BAT beside the program. Double-click that instead, and the window stays open so you can read the results."
+"build.saved_with_launcher" = "Saved to {path}, together with a .BAT file to run it."

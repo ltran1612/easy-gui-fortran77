@@ -211,17 +211,22 @@ impl FsGuard {
     ///
     /// It refuses to overwrite one of the user's source files, which no save dialog
     /// should produce but which would be unrecoverable if it ever did.
-    pub fn export_built_program(&self, from: &Path, to: &Path) -> Result<()> {
-        self.assert_under_write_root(from)?;
+    /// The checks every write outside the data root must pass.
+    ///
+    /// Saving is the one place this application writes where the user pointed
+    /// rather than where it owns, so the rules are the same whether what lands
+    /// there is the program or the little script that starts it.
+    fn check_export_destination(to: &Path) -> Result<()> {
         if to.is_dir() {
             return Err(EfError::Other(format!(
                 "{} is a folder, not a file name",
                 to.display()
             )));
         }
-        // `fs::copy` follows a symlink, so a link named `out.exe` pointing at the user's
-        // source would be written straight through the extension check below. No
-        // save dialog produces that, but the check exists for the case it does.
+        // `fs::copy` follows a symlink, so a link named `out.exe` pointing at the
+        // user's source would be written straight through the extension check
+        // below. No save dialog produces that, but the check exists for the case
+        // it does.
         if fs::symlink_metadata(to)
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false)
@@ -242,6 +247,32 @@ impl FsGuard {
                 fs::create_dir_all(parent).map_err(|e| EfError::io(parent, e))?;
             }
         }
+        Ok(())
+    }
+
+    /// Write the launcher script beside a saved program.
+    ///
+    /// Same destination rules as the program itself: never through a link, never
+    /// over anything that looks like source, never into a directory as if it
+    /// were a file name.
+    pub fn export_launcher(&self, to: &Path, text: &str) -> Result<()> {
+        Self::check_export_destination(to)?;
+        fs::write(to, text).map_err(|e| EfError::io(to, e))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(md) = fs::metadata(to) {
+                let mut perms = md.permissions();
+                perms.set_mode(perms.mode() | 0o111);
+                let _ = fs::set_permissions(to, perms);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn export_built_program(&self, from: &Path, to: &Path) -> Result<()> {
+        self.assert_under_write_root(from)?;
+        Self::check_export_destination(to)?;
         fs::copy(from, to).map_err(|e| EfError::io(to, e))?;
         #[cfg(unix)]
         {

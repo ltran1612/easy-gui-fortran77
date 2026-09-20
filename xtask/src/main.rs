@@ -218,6 +218,11 @@ fn check_hygiene() -> Result<()> {
         let text = std::fs::read_to_string(&file)?;
 
         let is_fs_guard = rel_str.ends_with("ef-core/src/fs_guard.rs");
+        // The module whose job is to *write* a shell script necessarily contains
+        // one. Exempt from the shell rule only, the same way fs_guard is exempt
+        // from the filesystem rule: the place that owns a hazard is the place
+        // allowed to name it.
+        let is_launcher = rel_str.ends_with("ef-core/src/launcher.rs");
         let is_test = rel_str.contains("/tests/")
             || rel_str.contains("ef-testkit/")
             || rel_str.contains("xtask/");
@@ -267,7 +272,7 @@ fn check_hygiene() -> Result<()> {
 
             // Rule 2: never spawn through a shell.
             for pat in ["cmd /c", "cmd.exe", "\"sh\"", "sh -c", "/bin/sh"] {
-                if line.contains(pat) && !exempt {
+                if line.contains(pat) && !exempt && !is_launcher {
                     v.push(Violation {
                         file: rel.clone(),
                         line: i + 1,

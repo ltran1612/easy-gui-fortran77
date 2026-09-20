@@ -18,9 +18,15 @@ Chương trình Fortran là chương trình **dòng lệnh**. Nếu bạn bấm 
 Windows Explorer, một cửa sổ đen sẽ hiện ra, chạy xong rồi **đóng lại ngay lập
 tức** — bạn sẽ không kịp đọc kết quả.
 
-Có hai cách để xem được kết quả:
+### Cách dễ nhất: dùng tệp `.BAT` mà ứng dụng đã tạo sẵn
 
-### Cách 1: Mở Command Prompt trong thư mục chứa chương trình
+Khi lưu chương trình, ứng dụng lưu kèm một tệp `.BAT` cùng tên ngay bên cạnh.
+**Hãy bấm đúp vào tệp `.BAT` đó** thay vì vào tệp `.EXE`. Cửa sổ sẽ ở lại sau khi
+chương trình chạy xong, và bạn nhập được số liệu khi chương trình yêu cầu.
+
+Nếu bạn không muốn tạo tệp này, hãy tắt tuỳ chọn trong **Cài đặt**.
+
+### Cách khác: mở Command Prompt trong thư mục chứa chương trình
 
 1. Mở thư mục bạn vừa lưu chương trình.
 2. Bấm vào thanh địa chỉ ở phía trên, gõ `cmd` rồi nhấn **Enter**.
@@ -28,19 +34,6 @@ Có hai cách để xem được kết quả:
 
 Cửa sổ này sẽ ở lại sau khi chương trình kết thúc, nên bạn đọc được kết quả và
 nhập được số liệu khi chương trình yêu cầu.
-
-### Cách 2: Tạo một tệp `.bat` để chạy kèm
-
-Tạo một tệp văn bản trong cùng thư mục, đặt tên ví dụ `chay.bat`, nội dung:
-
-```
-@echo off
-TenChuongTrinh.exe
-pause
-```
-
-Thay `TenChuongTrinh.exe` bằng tên chương trình của bạn. Từ nay chỉ cần bấm đúp
-vào `chay.bat`. Dòng `pause` giữ cửa sổ mở lại cho đến khi bạn nhấn một phím.
 
 ## Tệp kết quả
 

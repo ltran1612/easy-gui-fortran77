@@ -139,3 +139,6 @@
 "update.download" = "Mở trang tải về"
 "update.download_hint" = "Hãy tải tệp cài đặt về và chạy nó. Tệp này sẽ thay thế phiên bản hiện tại và giữ nguyên các chương trình của bạn."
 "update.failed" = "Không kiểm tra được: {reason}"
+"settings.create_launcher" = "Tạo kèm tệp để chạy chương trình"
+"settings.create_launcher_hint" = "Lưu thêm một tệp .BAT nhỏ bên cạnh chương trình. Hãy bấm đúp vào tệp đó, cửa sổ sẽ ở lại để bạn đọc kết quả."
+"build.saved_with_launcher" = "Đã lưu vào {path}, kèm theo tệp .BAT để chạy."

@@ -10,6 +10,7 @@ use ef_core::config::{LoadNote, Settings, Store};
 use ef_core::fs_guard::FsGuard;
 use ef_core::help;
 use ef_core::i18n::{self, Lang};
+use ef_core::launcher;
 use ef_core::paths::{AppPaths, WorkLayout};
 use ef_core::project::{
     suggested_program_file_name, Dialect, FileStatus, LineLength, OptLevel, Program,
@@ -383,16 +384,41 @@ impl App {
             return;
         };
 
-        match self.store.guard().export_built_program(&built, &dest) {
-            Ok(()) => {
-                self.banner = Some((
-                    tr!(lang, "build.saved", path = text::display_path(&dest)),
-                    false,
-                ));
-                self.saved_to = Some(dest);
-            }
-            Err(e) => self.banner = Some((tr!(lang, "build.save_failed", reason = e), true)),
+        if let Err(e) = self.store.guard().export_built_program(&built, &dest) {
+            self.banner = Some((tr!(lang, "build.save_failed", reason = e), true));
+            return;
         }
+
+        // The little script that keeps the window open. Its absence is not a
+        // failed save -- the program is already written and works -- so a
+        // problem here is reported without retracting the good news.
+        let mut with_launcher = false;
+        if self.settings.create_launcher {
+            let windows = match &self.toolchain {
+                ToolchainState::Ready { tc, .. } => tc.exe_suffix().eq_ignore_ascii_case(".exe"),
+                _ => cfg!(windows),
+            };
+            if let Some((path, script)) = launcher::beside(&dest, windows) {
+                match self.store.guard().export_launcher(&path, script) {
+                    Ok(()) => with_launcher = true,
+                    Err(e) => tracing::warn!("could not write the launcher: {e}"),
+                }
+            }
+        }
+
+        self.banner = Some((
+            if with_launcher {
+                tr!(
+                    lang,
+                    "build.saved_with_launcher",
+                    path = text::display_path(&dest)
+                )
+            } else {
+                tr!(lang, "build.saved", path = text::display_path(&dest))
+            },
+            false,
+        ));
+        self.saved_to = Some(dest);
     }
 
     // -------------------------------------------------------------- updates
@@ -1449,6 +1475,22 @@ impl App {
                         .weak(),
                 );
             }
+
+            ui.add_space(10.0);
+            if ui
+                .checkbox(
+                    &mut self.settings.create_launcher,
+                    tr!(lang, "settings.create_launcher"),
+                )
+                .changed()
+            {
+                self.mark_dirty();
+            }
+            ui.label(
+                egui::RichText::new(tr!(lang, "settings.create_launcher_hint"))
+                    .small()
+                    .weak(),
+            );
 
             ui.add_space(10.0);
             if ui

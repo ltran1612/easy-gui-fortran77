@@ -17,9 +17,16 @@ A Fortran program is a **command-line** program. If you double-click it in
 Windows Explorer, a black window appears, the program runs, and the window
 **closes immediately** — too fast to read the results.
 
-There are two ways to see the output:
+### The easy way: the `.BAT` file the application saved for you
 
-### Option 1: open a Command Prompt in the folder
+When you save a program, the application saves a `.BAT` file of the same name
+right beside it. **Double-click that `.BAT` instead of the `.EXE`.** The window
+stays open after the program finishes, and you can type in data when the program
+asks for it.
+
+If you would rather not have that file, turn the option off in **Settings**.
+
+### The other way: open a Command Prompt in the folder
 
 1. Open the folder where you saved the program.
 2. Click the address bar at the top, type `cmd`, and press **Enter**.
@@ -27,20 +34,6 @@ There are two ways to see the output:
 
 That window stays open after the program finishes, so you can read the results
 and type in data when the program asks for it.
-
-### Option 2: make a `.bat` file to run it
-
-Create a text file in the same folder, named for example `run.bat`, containing:
-
-```
-@echo off
-YourProgram.exe
-pause
-```
-
-Replace `YourProgram.exe` with your program's name. From then on, just
-double-click `run.bat`. The `pause` line keeps the window open until you press a
-key.
 
 ## Output files
 

@@ -39,6 +39,11 @@ pub struct Settings {
     pub language: Lang,
     pub zoom: f32,
     pub check_updates: bool,
+    /// Write a small `.bat`/`.sh` beside a saved program so double-clicking it
+    /// keeps the window open. On by default: a console program that vanishes
+    /// the instant it finishes is the first thing that goes wrong for someone
+    /// running one from Explorer.
+    pub create_launcher: bool,
     pub last_check_utc: Option<String>,
     pub toolchain_override: Option<PathBuf>,
 }
@@ -50,6 +55,7 @@ impl Default for Settings {
             language: Lang::from_locale(sys_locale_best().as_deref()),
             zoom: 1.15,
             check_updates: true,
+            create_launcher: true,
             last_check_utc: None,
             toolchain_override: None,
         }

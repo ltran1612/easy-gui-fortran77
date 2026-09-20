@@ -317,6 +317,64 @@ fn build_runnable(f: &Fixture) -> PathBuf {
     outcome.exe.unwrap()
 }
 
+/// The launcher is what makes a saved program usable from Explorer at all: a
+/// console program double-clicked there prints and vanishes before it can be
+/// read. This checks the whole chain — build, save, write the script beside it,
+/// and have that script actually start the program.
+#[test]
+fn a_launcher_is_written_beside_the_saved_program_and_starts_it() {
+    let f = Fixture::new(&[("PROG.FOR", SRC)]);
+    let exe = build_runnable(&f);
+
+    // A name with diacritics on purpose: the script must find its sibling
+    // without spelling it out.
+    let dest = f
+        .user_files
+        .parent()
+        .unwrap()
+        .join(format!("Tính dầm{}", std::env::consts::EXE_SUFFIX));
+    f.guard.export_built_program(&exe, &dest).unwrap();
+
+    let windows = cfg!(windows);
+    let (script, text) = ef_core::launcher::beside(&dest, windows).expect("a launcher path");
+    f.guard.export_launcher(&script, text).unwrap();
+
+    assert!(script.exists(), "no launcher at {}", script.display());
+    assert_eq!(
+        script.parent(),
+        dest.parent(),
+        "it belongs beside the program"
+    );
+    assert!(
+        !text.contains("dầm"),
+        "the program's name must not have to survive a codepage"
+    );
+
+    // Running a .bat needs cmd.exe, so only the shell form is exercised here;
+    // the batch form's content is pinned by unit tests in ef-core.
+    if !windows {
+        let out = ef_testkit::spawn_tolerating_busy(
+            std::process::Command::new(&script)
+                .current_dir(f.user_files.parent().unwrap())
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped()),
+        )
+        .expect("the launcher must be executable")
+        .wait_with_output()
+        .expect("waiting for the launcher");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            text.contains("Nhap so N:"),
+            "the launcher did not start the program; got {text:?}"
+        );
+        assert!(
+            text.contains("Program finished"),
+            "the launcher must say so and wait; got {text:?}"
+        );
+    }
+}
+
 #[test]
 fn the_built_program_can_be_saved_where_he_chooses_and_still_runs() {
     // The build tree is scratch space that gets cleaned up, so saving is how the user
