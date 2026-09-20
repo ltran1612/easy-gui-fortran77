@@ -106,12 +106,14 @@ of things that look wrong and are not.
 ## What it does and does not do
 
 It **builds**. It does not run your program — that is yours to do. A console
-program double-clicked from Explorer flashes and closes before it can be read, so
-saving also writes a `.BAT` beside it that waits; an option builds that waiting
-into the `.EXE` itself, for when the program travels without its sibling.
+program double-clicked from Explorer would flash and close before it could be
+read, so the waiting is built into the `.EXE` itself: it asks whether it owns the
+console and waits for a key only when it does. Run from a Command Prompt or a
+script it exits as usual, and because the waiting travels inside the program, it
+still works after the file is emailed or copied elsewhere.
 
 The build happens in a temporary working folder, so **Save the program…** is how
-you end up with something you keep. Those two files are the only things the
+you end up with something you keep. That saved program is the only thing the
 application ever writes outside its own data directory. It copies only what it
 built, and refuses to write over anything that looks like a source file.
 

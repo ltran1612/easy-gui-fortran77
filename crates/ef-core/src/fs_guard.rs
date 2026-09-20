@@ -239,23 +239,11 @@ impl FsGuard {
         Ok(())
     }
 
-    /// Write the launcher script beside a saved program.
-    ///
-    /// Same destination rules as the program itself: never through a link, never
-    /// over anything that looks like source, never into a directory as if it
-    /// were a file name.
-    pub fn export_launcher(&self, to: &Path, text: &str) -> Result<()> {
-        Self::check_export_destination(to)?;
-        fs::write(to, text).map_err(|e| EfError::io(to, e))?;
-        make_runnable(to);
-        Ok(())
-    }
-
     /// Copy a built program to a destination the user chose.
     ///
-    /// This and `export_launcher` are the only two places the application writes
-    /// outside its own data directory, and both are deliberate: the point of the
-    /// tool is to hand back something to keep. What keeps it honest is that
+    /// The only place the application writes outside its own data directory, and
+    /// deliberately so: the point of the tool is to hand back something to
+    /// keep. What keeps it honest is that
     /// `from` must be inside our work tree — we export only what we built, never
     /// copy one of the user's own files somewhere else — and that `to` came from
     /// a save dialog, so nothing lands anywhere unnamed.

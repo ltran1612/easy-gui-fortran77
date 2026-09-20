@@ -39,11 +39,6 @@ pub struct Settings {
     pub language: Lang,
     pub zoom: f32,
     pub check_updates: bool,
-    /// Write a small `.bat`/`.sh` beside a saved program so double-clicking it
-    /// keeps the window open. On by default: a console program that vanishes
-    /// the instant it finishes is the first thing that goes wrong for someone
-    /// running one from Explorer.
-    pub create_launcher: bool,
     pub last_check_utc: Option<String>,
     pub toolchain_override: Option<PathBuf>,
 }
@@ -55,7 +50,6 @@ impl Default for Settings {
             language: Lang::from_locale(sys_locale_best().as_deref()),
             zoom: 1.15,
             check_updates: true,
-            create_launcher: true,
             last_check_utc: None,
             toolchain_override: None,
         }
@@ -357,6 +351,34 @@ mod tests {
             }
             other => panic!("expected recovery from backup, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_setting_that_no_longer_exists_does_not_cost_the_user_the_others() {
+        // `create_launcher` was removed once the program learned to wait for a
+        // key by itself. Every settings file written before that still names it.
+        //
+        // This matters more than it sounds: `load_settings` falls back to
+        // `Settings::default()` on any parse failure, so a field serde refused
+        // to ignore would not just drop that one setting -- it would silently
+        // reset the language back to the locale guess and the zoom back to
+        // 1.15, on a machine where someone had deliberately set both.
+        let (td, s) = store();
+        let path = AppPaths::under(td.path()).settings_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "schema_version = 1\nlanguage = \"en\"\nzoom = 1.5\ncreate_launcher = true\n",
+        )
+        .unwrap();
+
+        let back = s.load_settings().unwrap();
+        assert_eq!(back.language, Lang::En, "the language must survive");
+        assert!(
+            (back.zoom - 1.5).abs() < f32::EPSILON,
+            "the zoom must survive, got {}",
+            back.zoom
+        );
     }
 
     #[test]

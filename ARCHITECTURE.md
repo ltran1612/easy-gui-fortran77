@@ -40,7 +40,7 @@ App::start_build          ef-gui/src/app.rs      spawns a thread, keeps drawing
     Compiling             build/args.rs          one argv per file, one process each
     Linking               build/args.rs          objects, then libraries, then flags
   BuildOutcome            ─ exe path, diagnostics, or a typed FileProblem
-App::save_program         fs_guard.rs            export, plus a launcher beside it
+App::save_program         fs_guard.rs            copy the built program out
 ```
 
 Two decisions in there are load-bearing:
@@ -96,9 +96,9 @@ That last one matters more than it looks: `i18n::lookup` falls back to English
 when a Vietnamese key is missing, so the failure is silent and the user simply
 sees the wrong language.
 
-Two modules are exempt from one rule each, and the exemption is the point:
-`fs_guard.rs` from the filesystem rule, `launcher.rs` from the shell rule. The
-place that owns a hazard is the place allowed to name it.
+One module is exempt from one rule, and the exemption is the point: `fs_guard.rs`
+from the filesystem rule. The place that owns a hazard is the place allowed to
+name it.
 
 ## Embedded and generated things, and what pins each
 
@@ -149,12 +149,13 @@ from passing for reasons unrelated to arithmetic.
 - **The window icon is set twice.** Windows takes it from the executable's
   resources (`ef-gui/build.rs`); everywhere else it comes from
   `ViewportBuilder::with_icon` at startup.
-- **Two ways to stop a console window vanishing.** A `.BAT` written beside the
-  saved program, and an opt-in shim linked into the program itself
-  (`assets/pause-shim.f90`, reached by `-Wl,--wrap=exit`). The first always
-  works; the second is Windows-only because the constructor mechanism that would
-  do it on Linux does not fire on MinGW, and the wrap that works on MinGW does
-  not fire on Linux.
+- **The pause shim is Windows-only, and that is not an oversight.** It stops a
+  double-clicked console window vanishing (`assets/pause-shim.f90`, reached by
+  `-Wl,--wrap=exit`) and is on by default. It cannot be shared with Linux: the
+  constructor mechanism that would do it there does not fire on MinGW, and the
+  wrap that works on MinGW does not fire on Linux. Opposite mechanisms, so the
+  option is simply inert off Windows — `wants_pause_shim` gates on the
+  toolchain's exe suffix, not the host.
 - **`objfmt` parses OMF rather than sniffing its first byte.** `0xF0` is an OMF
   library header and also `đ` in the Vietnamese codepage the user's comments are
   written in.

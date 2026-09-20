@@ -21,16 +21,11 @@ kết quả.
 Việc chờ này là một tuỳ chọn — **Chờ nhấn phím trước khi đóng cửa sổ** trong
 **Tuỳ chọn nâng cao** — và nó được bật sẵn, trừ khi bạn tự tắt đi. Nó chỉ áp
 dụng khi bạn bấm đúp vào chương trình. Nếu chạy từ Command Prompt hoặc từ một
-tệp `.BAT` thì chương trình chạy xong là xong, không chờ gì cả, vì cửa sổ đó vốn
+tệp lệnh thì chương trình chạy xong là xong, không chờ gì cả, vì cửa sổ đó vốn
 không tự đóng.
 
-### Tệp `.BAT` mà ứng dụng đã tạo sẵn
-
-Khi lưu chương trình, ứng dụng lưu kèm một tệp `.BAT` cùng tên ngay bên cạnh.
-Bấm đúp vào tệp đó cũng cho kết quả tương tự, và vẫn dùng được kể cả khi sau này
-bạn tắt tuỳ chọn chờ nhấn phím.
-
-Nếu bạn không muốn tạo tệp này, hãy tắt tuỳ chọn trong **Cài đặt**.
+Việc chờ nằm ngay bên trong chương trình, nên nó đi theo chương trình. Bạn có
+thể gửi tệp `.EXE` qua email hoặc chép vào USB, nó vẫn chờ như vậy.
 
 ### Cách khác: mở Command Prompt trong thư mục chứa chương trình
 

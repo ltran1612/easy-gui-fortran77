@@ -13,7 +13,6 @@ pub mod error;
 pub mod fs_guard;
 pub mod help;
 pub mod i18n;
-pub mod launcher;
 pub mod paths;
 pub mod project;
 pub mod text;

@@ -19,17 +19,12 @@ long as you like to read the results.
 
 That waiting is an option — **Wait for a key before the window closes**, under
 **Advanced options** — and it is on unless you turn it off. It applies only when
-you double-click the program. Started from a Command Prompt or from a `.BAT`, the
+you double-click the program. Started from a Command Prompt or from a script, the
 program finishes and exits as usual, because the window it is running in was not
 going anywhere.
 
-### The `.BAT` file the application saved for you
-
-When you save a program, the application saves a `.BAT` file of the same name
-right beside it. Double-clicking that does the same job, and keeps working even
-if you ever turn the waiting off.
-
-If you would rather not have that file, turn the option off in **Settings**.
+The waiting is built into the program itself, so it travels with it. You can
+email the `.EXE` to someone or copy it to a memory stick, and it still waits.
 
 ### The other way: open a Command Prompt in the folder
 
