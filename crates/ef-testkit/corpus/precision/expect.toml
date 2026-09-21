@@ -1,7 +1,4 @@
-description = "32-bit single-precision arithmetic, pinned to IEEE 754 facts. Not the shipped default -- that is 80-bit, and is pinned in tests/precision.rs -- but still the arithmetic a user gets with extended precision turned off, and still facts worth holding it to."
-# The shipped default carries REAL at 80 bits. These are single-precision
-# facts, so the case asks for single precision explicitly.
-extended_precision = false
+description = "Arithmetic under the settings the application ships, pinned to IEEE 754 single-precision facts. The default does its arithmetic the old compiler's way, on the x87 unit, but still stores REAL at 32 bits -- so every value read back here is single precision's, exactly."
 sources = ["PRECIS.FOR", "OPAQUE.FOR"]
 success = true
 run = true

@@ -101,28 +101,32 @@ pub struct BuildOptions {
     /// by an earlier build stop being readable, and `EQUIVALENCE` overlays see
     /// different bytes.
     pub default_real8: bool,
-    /// `-freal-4-real-10`: carry every REAL as an 80-bit extended value.
+    /// Do the arithmetic the way the DOS compiler did: on the x87 unit, at
+    /// extended precision inside each expression, rounding to the variable's own
+    /// size whenever a value is stored. `-mfpmath=387`, built without
+    /// optimisation.
     ///
-    /// On by default, and the reason is fidelity rather than extra digits. The
-    /// DOS compiler this replaces did its arithmetic on the x87 unit, at 80 bits
-    /// inside the processor, rounding to 32 only when it stored a variable. Plain
-    /// 32-bit arithmetic is therefore not a faithful copy of it: an expression
-    /// mixing large and small values -- `(1.0E7 + 0.3) - 1.0E7` -- gave 0.3 on the
-    /// old machine and gives 0.0 in 32 bits, wrong in the first decimal place.
-    /// Carried at 80 bits throughout, it agrees with the old machine to four
-    /// decimal places in every case measured, and gives the same answer at every
-    /// optimisation level. (Using the x87 unit's registers directly, via
-    /// `-mfpmath=387`, imitates the old machine more literally but gives
-    /// different answers at `-O0` and `-O1`, so it is not used.)
+    /// On by default, because it is the only setting that reproduces the old
+    /// machine on both counts that matter. Plain 32-bit arithmetic rounds every
+    /// step, so an expression mixing large and small values loses what the old
+    /// machine kept: `(1.0E7 + 0.3) - 1.0E7` is 0.3 there and 0.0 in 32 bits.
+    /// Widening REAL to 80 bits (`-freal-4-real-10`, which 0.1.14 shipped) keeps
+    /// that, but stores more than the old machine did -- so a decision made by
+    /// comparing two computed values for equality came out differently in 73 of
+    /// 1600 cases measured. This matches the old machine in all 1600, and keeps
+    /// the 0.3, on the shipped Windows compiler as well as on Linux.
     ///
-    /// It changes REAL's storage size, which matters only for programs that
-    /// overlay memory -- `EQUIVALENCE`, `COMMON` shared with code built
-    /// differently, unformatted files written by an earlier build, or a
-    /// precompiled library expecting 32-bit arguments. For those it can be
-    /// turned off. DOUBLE PRECISION is left at 64 bits either way.
+    /// Without optimisation because optimisation is what breaks the imitation:
+    /// at -O1 the compiler keeps values in registers across statements instead
+    /// of storing them, so they are no longer rounded where the old compiler
+    /// rounded them, and the answer changes with the optimisation level. At -O0
+    /// every variable is written back after every statement, as a 1985 compiler
+    /// did. `Program::effective_options` enforces it.
     ///
-    /// Yields to `default_real8`: both redefine REAL, and an explicit choice of
-    /// 8 bytes is a deliberate one. See `wants_extended_precision`.
+    /// REAL stays 4 bytes -- only where the arithmetic happens changes -- so none
+    /// of the hazards of changing a type's size apply. A library compiled
+    /// elsewhere still receives the 32-bit values it expects, and this combines
+    /// freely with `default_real8`.
     pub extended_precision: bool,
     /// Large local arrays overflow the 1 MB Windows stack.
     pub big_stack: bool,
@@ -174,28 +178,6 @@ impl BuildOptions {
     ///
     /// Gated on the *toolchain's* suffix rather than the host, so a Windows
     /// program cross-built from Linux still gets it.
-    /// Resolve the one contradiction these options can express.
-    ///
-    /// `default_real8` and `extended_precision` both redefine REAL. A program
-    /// saved before extended precision existed, with 8-byte REAL switched on,
-    /// loads with both true: the new field is missing and so takes its default.
-    /// The build already lets 8-byte win (`wants_extended_precision`); this makes
-    /// what the window shows agree with what the build does, instead of showing
-    /// both boxes ticked while only one applies. It keeps the explicit choice and
-    /// drops the default nobody made, so it overrides nothing.
-    pub fn normalize(&mut self) {
-        if self.default_real8 {
-            self.extended_precision = false;
-        }
-    }
-
-    pub fn wants_extended_precision(&self) -> bool {
-        // One predicate, so the two options that both redefine REAL can never
-        // be emitted together. `default_real8` wins because nobody turns it on
-        // by accident; `extended_precision` is on by default.
-        self.extended_precision && !self.default_real8
-    }
-
     pub fn wants_pause_shim(&self, exe_suffix: &str) -> bool {
         self.keep_window_open && exe_suffix.eq_ignore_ascii_case(".exe")
     }
@@ -387,31 +369,17 @@ impl Default for Program {
 }
 
 impl Program {
-    /// True when extended precision is switched on but cannot apply, because
-    /// this program links a library built somewhere else.
-    ///
-    /// The window uses this to say so, next to the option, rather than leave
-    /// the user believing a setting is in force that is not.
-    pub fn extended_precision_withheld(&self) -> bool {
-        self.options.wants_extended_precision() && !self.libraries.is_empty()
-    }
-
     /// The options a build of this program actually uses.
     ///
-    /// Identical to `options`, except that extended precision is withheld from
-    /// a program that links a prebuilt library. Extended precision changes what
-    /// REAL is, and a library the user added was compiled elsewhere -- almost
-    /// certainly with ordinary 32-bit REAL, and there is no way to find out. The
-    /// two cannot pass values to each other: an 80-bit argument handed to a
-    /// routine expecting 32 bits is read from the wrong bytes. Measured:
-    /// `CALL ADDUP(2.0, 40.0, X)` against a prebuilt ADDUP returned 0.0, not
-    /// 42.0 -- no error, no warning, just a wrong number. So a program that links
-    /// a library is built in 32 bits, which is exactly what it was before this
-    /// option existed.
+    /// Identical to `options` except for optimisation: arithmetic done the old
+    /// compiler's way is built without it, whatever level is saved, because
+    /// optimisation is exactly what makes x87 arithmetic stop imitating the old
+    /// machine. The saved level is kept, and applies again if that option is
+    /// turned off.
     pub fn effective_options(&self) -> BuildOptions {
         let mut o = self.options.clone();
-        if self.extended_precision_withheld() {
-            o.extended_precision = false;
+        if o.extended_precision {
+            o.opt_level = OptLevel::O0;
         }
         o
     }
@@ -587,28 +555,37 @@ pub fn now_rfc3339() -> String {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn extended_precision_is_withheld_from_a_program_that_links_a_library() {
-        let mut p = Program::new("with a library");
-        assert!(p.effective_options().extended_precision, "on by default");
-        assert!(!p.extended_precision_withheld());
+    fn the_old_compilers_arithmetic_is_built_without_optimisation() {
+        // Optimisation keeps values in registers across statements, so they stop
+        // being rounded where the old compiler rounded them. The build therefore
+        // ignores the saved level while the option is on -- without touching it.
+        let mut p = Program::new("pile foundation");
+        p.options.opt_level = OptLevel::O2;
 
-        p.libraries.push(LibraryRef::new("/home/u/libaddup.a"));
-        assert!(
-            p.extended_precision_withheld(),
-            "a prebuilt library was compiled elsewhere, almost certainly in 32-bit"
+        assert!(p.options.extended_precision, "on by default");
+        assert_eq!(
+            p.effective_options().opt_level,
+            OptLevel::O0,
+            "the build must not optimise while imitating the old compiler"
         );
-        assert!(
-            !p.effective_options().extended_precision,
-            "so the build must not hand it 80-bit arguments"
-        );
-        assert!(
-            p.options.extended_precision,
-            "without touching the setting the user saved"
+        assert_eq!(
+            p.options.opt_level,
+            OptLevel::O2,
+            "and the saved level is kept"
         );
 
-        // Already off: nothing is being withheld, so nothing to say.
         p.options.extended_precision = false;
-        assert!(!p.extended_precision_withheld());
+        assert_eq!(
+            p.effective_options().opt_level,
+            OptLevel::O2,
+            "turned off, the saved level applies again"
+        );
+
+        // REAL keeps its size in this mode, so a library built elsewhere is
+        // safe and nothing is withheld from a program that links one.
+        p.options.extended_precision = true;
+        p.libraries.push(LibraryRef::new("/home/u/libaddup.a"));
+        assert!(p.effective_options().extended_precision);
     }
 
     use super::*;

@@ -73,8 +73,11 @@ fn dialect_flags(opts: &BuildOptions, caps: &FlagCapabilities, out: &mut Vec<OsS
     if caps.allow_invalid_boz {
         out.push("-fallow-invalid-boz".into());
     }
-    if opts.wants_extended_precision() && caps.real10 {
-        out.push("-freal-4-real-10".into());
+    if opts.extended_precision && caps.x87 {
+        // Arithmetic on the x87 unit, the way the DOS compiler did it. REAL
+        // stays 32 bits in memory; only the arithmetic changes. The `-O0` this
+        // depends on comes from `Program::effective_options`, not from here.
+        out.push("-mfpmath=387".into());
     }
     if opts.check_bounds && caps.check_bounds {
         // Only `bounds`: the other `-fcheck` categories cost far more at run
@@ -641,40 +644,37 @@ mod tests {
     }
 
     #[test]
-    fn real_is_80_bit_by_default_and_yields_to_an_explicit_choice() {
+    fn arithmetic_is_done_the_old_compilers_way_by_default() {
         let (layout, src) = fixture();
         let caps = FlagCapabilities::optimistic();
         let args = |o: &BuildOptions| strings(&compile_args(&caps, &[], o, &src, &layout, &[]));
 
         let shipped = args(&BuildOptions::default());
+        assert!(shipped.contains(&"-mfpmath=387".to_string()), "{shipped:?}");
         assert!(
-            shipped.contains(&"-freal-4-real-10".to_string()),
-            "{shipped:?}"
+            !shipped.iter().any(|f| f.starts_with("-freal-")),
+            "REAL must keep its size; only the arithmetic changes: {shipped:?}"
         );
 
         let off = args(&BuildOptions {
             extended_precision: false,
             ..Default::default()
         });
-        assert!(!off.iter().any(|f| f.starts_with("-freal-")), "{off:?}");
+        assert!(!off.iter().any(|f| f.starts_with("-mfpmath")), "{off:?}");
 
-        // Both redefine REAL. Handed both, gfortran does something nobody
-        // intended, so exactly one is emitted -- the one the user chose.
-        let eight = args(&BuildOptions {
+        // It changes where arithmetic happens, not how big REAL is, so it no
+        // longer has to give way to 8-byte REAL. Both apply together.
+        let both = args(&BuildOptions {
             default_real8: true,
             ..Default::default()
         });
-        assert!(eight.contains(&"-fdefault-real-8".to_string()), "{eight:?}");
-        assert!(
-            !eight.contains(&"-freal-4-real-10".to_string()),
-            "an explicit 8-byte REAL must win over the 80-bit default: {eight:?}"
-        );
+        assert!(both.contains(&"-mfpmath=387".to_string()), "{both:?}");
+        assert!(both.contains(&"-fdefault-real-8".to_string()), "{both:?}");
 
-        // There is no 80-bit REAL on ARM. A compiler that does not offer it --
-        // an Apple Silicon Mac, say -- builds in ordinary 32-bit instead of
-        // failing on a flag it does not know.
+        // There is no x87 on ARM. A compiler without it -- an Apple Silicon Mac --
+        // builds in plain 32-bit rather than failing on a flag it does not know.
         let arm = FlagCapabilities {
-            real10: false,
+            x87: false,
             ..FlagCapabilities::optimistic()
         };
         let a = strings(&compile_args(
@@ -685,7 +685,7 @@ mod tests {
             &layout,
             &[],
         ));
-        assert!(!a.iter().any(|f| f.starts_with("-freal-")), "{a:?}");
+        assert!(!a.iter().any(|f| f.starts_with("-mfpmath")), "{a:?}");
     }
 
     #[test]

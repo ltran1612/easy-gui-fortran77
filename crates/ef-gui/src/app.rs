@@ -1192,9 +1192,6 @@ impl App {
         egui::CollapsingHeader::new(tr!(lang, "options.advanced"))
             .default_open(false)
             .show(ui, |ui| {
-                // Read before `o` borrows the options: whether this program links
-                // a library decides whether extended precision can apply to it.
-                let links_a_library = !self.programs[idx].libraries.is_empty();
                 let o = &mut self.programs[idx].options;
 
                 ui.horizontal(|ui| {
@@ -1251,38 +1248,13 @@ impl App {
                 changed |= ui
                     .checkbox(&mut o.d_lines_as_code, tr!(lang, "options.dlines"))
                     .changed();
-                // Exclusive: both redefine REAL. Ticking one clears the other,
-                // so the window never shows two settings of which only one
-                // applies.
-                if ui
+                changed |= ui
                     .checkbox(&mut o.extended_precision, tr!(lang, "options.extended"))
                     .on_hover_text(tr!(lang, "options.extended_hint"))
-                    .changed()
-                {
-                    changed = true;
-                    if o.extended_precision {
-                        o.default_real8 = false;
-                    }
-                }
-                // Said beside the option, because the alternative is a ticked box
-                // that is quietly not in force. The build already does the safe
-                // thing (`Program::effective_options`); this makes it visible.
-                if o.wants_extended_precision() && links_a_library {
-                    ui.label(
-                        egui::RichText::new(tr!(lang, "options.extended_withheld"))
-                            .small()
-                            .color(theme::warning_color(ui)),
-                    );
-                }
-                if ui
+                    .changed();
+                changed |= ui
                     .checkbox(&mut o.default_real8, tr!(lang, "options.real8"))
-                    .changed()
-                {
-                    changed = true;
-                    if o.default_real8 {
-                        o.extended_precision = false;
-                    }
-                }
+                    .changed();
                 changed |= ui
                     .checkbox(&mut o.big_stack, tr!(lang, "options.bigstack"))
                     .changed();
@@ -1296,16 +1268,29 @@ impl App {
                     )
                     .on_hover_text(tr!(lang, "options.keep_window_open_hint"))
                     .changed();
+                // Doing arithmetic the old compiler's way means building without
+                // optimisation (`Program::effective_options`), so the choice is
+                // shown as not in force rather than left looking like it is.
+                let old_way = o.extended_precision;
                 ui.horizontal(|ui| {
                     ui.label(tr!(lang, "options.opt"));
-                    for (lvl, name) in [
-                        (OptLevel::O0, "-O0"),
-                        (OptLevel::O1, "-O1"),
-                        (OptLevel::O2, "-O2"),
-                    ] {
-                        changed |= ui.selectable_value(&mut o.opt_level, lvl, name).changed();
-                    }
+                    ui.add_enabled_ui(!old_way, |ui| {
+                        for (lvl, name) in [
+                            (OptLevel::O0, "-O0"),
+                            (OptLevel::O1, "-O1"),
+                            (OptLevel::O2, "-O2"),
+                        ] {
+                            changed |= ui.selectable_value(&mut o.opt_level, lvl, name).changed();
+                        }
+                    });
                 });
+                if old_way {
+                    ui.label(
+                        egui::RichText::new(tr!(lang, "options.opt_off_for_old_way"))
+                            .small()
+                            .weak(),
+                    );
+                }
 
                 let mut extra = o.extra_flags.join(" ");
                 ui.horizontal(|ui| {

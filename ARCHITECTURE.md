@@ -131,23 +131,36 @@ skip into a failure, and CI sets it so the corpus can never be silently skipped.
 Wrapped around every corpus case is the one assertion the product exists for: the
 source tree is byte-identical before and after.
 
-**`REAL` is 80-bit by default** (`-freal-4-real-10`), for fidelity rather than
-extra digits: the DOS compiler this replaces ran on the x87 unit at 80 bits
-internally, and plain 32-bit arithmetic loses things it kept —
-`(1.0E7 + 0.3) − 1.0E7` is `0.3` there and `0.0` in 32 bits. It is done by
-widening `REAL` rather than with `-mfpmath=387`, because the x87 registers give
-a different answer at `-O0` than at `-O1`.
+**Arithmetic is done the old compiler's way by default**: `-mfpmath=387` at
+`-O0`. The DOS compiler worked each expression out at extended precision on the
+x87 unit and rounded only when it stored a variable. Measured against a model
+of it, three candidates:
 
-**`tests/precision.rs` pins all three precisions** against bit patterns worked
-out from each format's definition, read through `EQUIVALENCE` so no `WRITE`
-formatting sits between the arithmetic and the assertion: 32-bit, 80-bit and
-64-bit must each give their own value, which proves both what ships and that the
-assertions are watching the arithmetic at all. Each precision must also agree
-with itself at `-O0`, `-O1` and `-O2`. `corpus/precision` keeps its IEEE
-single-precision facts — the widened-single trap, denormals surviving,
-unreassociated accumulation, integer truncation, mixed mode — pinned to 32-bit
-explicitly, since they are still true of the arithmetic a user gets with
-extended precision off.
+| | keeps `(1.0E7 + 0.3) − 1.0E7` | equality decisions matching it |
+|---|---|---|
+| plain 32-bit | no — `0.0` | 1600 / 1600 |
+| `REAL` widened to 80 bits (`-freal-4-real-10`, 0.1.14) | yes | 1527 / 1600 |
+| **x87 at `-O0`** | **yes** | **1600 / 1600** |
+
+Widening `REAL` stores more than the old machine did, so two values that used to
+round to the same number can differ in the 19th digit and send a comparison the
+other way. `-mfpmath=387 -ffloat-store` looks like the fix for x87's
+optimisation-dependence and is not: it also rounds the compiler's hidden
+temporaries, so it loses the `0.3` too. `-O0` is what works — every variable is
+written back after every statement, exactly as a 1985 compiler did — and
+`Program::effective_options` enforces it. `REAL` stays 4 bytes throughout, so no
+storage hazard applies and a library built elsewhere still gets the values it
+expects.
+
+**`tests/precision.rs` pins the four things that make that true**, each chosen
+so it fails if the mode stops working: `REAL` stays 4 bytes (0.1 read back
+through `EQUIVALENCE` as `0x3DCCCCCD`); the `0.3` survives where plain 32-bit
+loses it; asking for `-O1` or `-O2` changes nothing; and two exact comparisons
+go the way the old compiler sent them rather than the way 80 bits did. Removing
+the `-O0` enforcement fails two of them; switching back to 80 bits fails three.
+`corpus/precision` pins IEEE single-precision facts under the shipped default —
+the widened-single trap, denormals, unreassociated accumulation, integer
+truncation, mixed mode — which hold because values are still stored at 32 bits.
 
 ## Things that look wrong and are not
 
@@ -166,13 +179,14 @@ extended precision off.
   wrap that works on MinGW does not fire on Linux. Opposite mechanisms, so the
   option is simply inert off Windows — `wants_pause_shim` gates on the
   toolchain's exe suffix, not the host.
-- **Extended precision is silently dropped for a program that links a
-  library.** Not a bug: `Program::effective_options` does it on purpose. A
-  prebuilt library was compiled elsewhere, almost certainly with 32-bit `REAL`,
-  and handing it 80-bit arguments reads the wrong bytes — `ADDUP(2.0, 40.0)`
-  came back `0.0`, with no error. So such a program builds in 32-bit, and the
-  window says so beside the option rather than leaving a ticked box that is not
-  in force. The build reads `effective_options`, never `options` directly.
+- **The optimisation level is ignored by default.** Not a bug:
+  `Program::effective_options` forces `-O0` while arithmetic is done the old
+  compiler's way, because optimisation keeps values in registers across
+  statements and so changes where they get rounded. The saved level is kept and
+  applies again if that option is turned off, and the window greys the setting
+  out and says why. The compile and link steps read `effective_options`; the
+  pause-shim check still reads `options`, harmlessly, since nothing about the
+  shim depends on arithmetic.
 - **`objfmt` parses OMF rather than sniffing its first byte.** `0xF0` is an OMF
   library header and also `đ` in the Vietnamese codepage the user's comments are
   written in.
