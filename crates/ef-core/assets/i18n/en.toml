@@ -48,6 +48,9 @@
 
 
 "diag.heading" = "Compiler messages"
+"diag.kind.error" = "Error"
+"diag.kind.warning" = "Warning"
+"diag.kind.note" = "Note"
 "diag.errors" = "{n} errors"
 "diag.warnings" = "{n} warnings"
 "diag.none" = "No messages."

@@ -1368,13 +1368,19 @@ impl App {
         }
         egui::ScrollArea::vertical().show(ui, |ui| {
             for d in &self.diagnostics {
-                let (color, tag) = match d.severity {
-                    Severity::Error => (theme::error_color(ui), "•"),
-                    Severity::Warning => (theme::warning_color(ui), "•"),
-                    Severity::Note => (ui.visuals().text_color(), "·"),
+                // The kind of message is written out, not left to colour. Both
+                // used to share one bullet and differ only in shade -- and in
+                // the light theme the error red and the warning amber are both
+                // dark and warm, so a warning read as an error to the person this
+                // is for, on the build that had in fact succeeded. Colour alone
+                // should never be the only way something is said.
+                let (color, kind) = match d.severity {
+                    Severity::Error => (theme::error_color(ui), tr!(lang, "diag.kind.error")),
+                    Severity::Warning => (theme::warning_color(ui), tr!(lang, "diag.kind.warning")),
+                    Severity::Note => (ui.visuals().text_color(), tr!(lang, "diag.kind.note")),
                 };
                 ui.horizontal_wrapped(|ui| {
-                    ui.colored_label(color, tag);
+                    ui.label(egui::RichText::new(kind).color(color).strong());
                     ui.vertical(|ui| {
                         let where_ = match (&d.file, d.line, d.col) {
                             (Some(f), Some(l), Some(c)) => {

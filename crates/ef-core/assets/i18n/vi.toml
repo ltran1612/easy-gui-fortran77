@@ -48,6 +48,9 @@
 
 
 "diag.heading" = "Thông báo từ trình biên dịch"
+"diag.kind.error" = "Lỗi"
+"diag.kind.warning" = "Cảnh báo"
+"diag.kind.note" = "Ghi chú"
 "diag.errors" = "{n} lỗi"
 "diag.warnings" = "{n} cảnh báo"
 "diag.none" = "Không có thông báo nào."
