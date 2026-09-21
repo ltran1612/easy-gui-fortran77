@@ -4,6 +4,7 @@
 //! the object-file-then-link mental model of the DOS-era tool this replaces.
 
 use crate::text;
+use crate::toolchain::probe::FlagCapabilities;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use time::OffsetDateTime;
@@ -101,32 +102,56 @@ pub struct BuildOptions {
     /// by an earlier build stop being readable, and `EQUIVALENCE` overlays see
     /// different bytes.
     pub default_real8: bool,
-    /// Do the arithmetic the way the DOS compiler did: on the x87 unit, at
-    /// extended precision inside each expression, rounding to the variable's own
-    /// size whenever a value is stored. `-mfpmath=387`, built without
-    /// optimisation.
+    /// Do the arithmetic the way the DOS compiler did, as nearly as gfortran
+    /// can: on the x87 unit, carrying extended precision inside a statement and
+    /// rounding to the variable's own size when a value is stored.
+    /// `-mfpmath=387`, built without optimisation.
     ///
-    /// On by default, because it is the only setting that reproduces the old
-    /// machine on both counts that matter. Plain 32-bit arithmetic rounds every
-    /// step, so an expression mixing large and small values loses what the old
-    /// machine kept: `(1.0E7 + 0.3) - 1.0E7` is 0.3 there and 0.0 in 32 bits.
-    /// Widening REAL to 80 bits (`-freal-4-real-10`, which 0.1.14 shipped) keeps
-    /// that, but stores more than the old machine did -- so a decision made by
-    /// comparing two computed values for equality came out differently in 73 of
-    /// 1600 cases measured. This matches the old machine in all 1600, and keeps
-    /// the 0.3, on the shipped Windows compiler as well as on Linux.
+    /// On by default because on what these programs mostly do -- work a formula
+    /// out and store it -- this is the setting that agrees with the old
+    /// compiler. Plain 32-bit rounds every step, so a formula mixing large and
+    /// small values loses what the old machine kept: `(A + B) - A` with
+    /// A = 1.0E7 and B = 0.3 is 0.3 there and 0.0 in 32 bits. Widening REAL to
+    /// 80 bits (0.1.14's `-freal-4-real-10`) keeps the 0.3 but stores more than
+    /// the old machine did, which sent 73 of 1600 exact comparisons of stored
+    /// values the other way.
     ///
-    /// Without optimisation because optimisation is what breaks the imitation:
-    /// at -O1 the compiler keeps values in registers across statements instead
-    /// of storing them, so they are no longer rounded where the old compiler
-    /// rounded them, and the answer changes with the optimisation level. At -O0
-    /// every variable is written back after every statement, as a 1985 compiler
-    /// did. `Program::effective_options` enforces it.
+    /// It is not a copy of the old compiler. Measured against Microsoft
+    /// FORTRAN 3.30 itself, these differ:
     ///
-    /// REAL stays 4 bytes -- only where the arithmetic happens changes -- so none
-    /// of the hazards of changing a type's size apply. A library compiled
-    /// elsewhere still receives the 32-bit values it expects, and this combines
-    /// freely with `default_real8`.
+    /// * A calculation compared directly, `IF (X*100.0 .LT. R)`, is compared at
+    ///   extended precision here. The old compiler rounded each side to REAL
+    ///   first -- as plain 32-bit does -- so when the two sides agree to the
+    ///   last digit, the decision can go the other way: 48 of 99 `.LT.` and 89
+    ///   of 99 `.EQ.` did in one sweep. Storing the calculation in a variable
+    ///   and comparing that agrees in every setting.
+    /// * A call partway through a formula -- `SIN`, `EXP`, `ALOG`, `**` with a
+    ///   REAL power, a FUNCTION of theirs -- rounds what has been worked out so
+    ///   far to 32 bits before the call. The old compiler kept it, so such a
+    ///   formula comes out as plain 32-bit would.
+    /// * A formula made only of literal numbers is worked out by the compiler,
+    ///   in 32 bits, before the program ever runs.
+    /// * `INT`, and assignment to an INTEGER, truncate the 32-bit value; the old
+    ///   compiler truncated the extended one. No setting here matches that.
+    /// * DOUBLE PRECISION moves to the x87 as well, so its intermediate results
+    ///   are carried at extended precision too, as the old compiler's were and
+    ///   plain 64-bit arithmetic's are not.
+    /// * A REAL is copied through the x87, so integer or text data kept in one
+    ///   by `EQUIVALENCE` can change on the way: a bit pattern that happens to
+    ///   be a signalling NaN comes out altered.
+    ///
+    /// Without optimisation because optimisation breaks the imitation. At -O1
+    /// values stay in registers across statements instead of being stored, so
+    /// they stop being rounded where the old compiler rounded them; and a
+    /// formula whose inputs the compiler can see is worked out while compiling,
+    /// in 32 bits. At -O0 every variable is written back after every statement,
+    /// as a 1985 compiler did. The price is speed: a long calculation runs
+    /// eight or nine times slower, which at the sizes these programs work at is
+    /// a fraction of a millisecond. `effective_opt_level` enforces it.
+    ///
+    /// REAL stays 4 bytes -- only where the arithmetic happens changes -- so a
+    /// library compiled elsewhere still receives the 32-bit values it expects,
+    /// and this combines freely with `default_real8`.
     pub extended_precision: bool,
     /// Large local arrays overflow the 1 MB Windows stack.
     pub big_stack: bool,
@@ -169,6 +194,31 @@ pub struct BuildOptions {
 }
 
 impl BuildOptions {
+    /// Is this build doing its arithmetic the old compiler's way?
+    ///
+    /// The one place that decides it, because three things act on the answer --
+    /// the `-mfpmath=387` on the compile line, the optimisation level beside it,
+    /// and whether the window shows that level as in force. Asking is not
+    /// enough: the compiler needs an x87 to do it on. One without -- an Apple
+    /// Silicon Mac -- builds plain arithmetic, at the level asked for.
+    pub fn old_compiler_arithmetic(&self, caps: &FlagCapabilities) -> bool {
+        self.extended_precision && caps.x87
+    }
+
+    /// The optimisation level a build with this compiler actually uses.
+    ///
+    /// The saved one, except while the arithmetic is done the old compiler's
+    /// way, which is built without optimisation whatever is saved (see
+    /// `extended_precision`). The saved level is left alone, and applies again
+    /// once that option is off.
+    pub fn effective_opt_level(&self, caps: &FlagCapabilities) -> OptLevel {
+        if self.old_compiler_arithmetic(caps) {
+            OptLevel::O0
+        } else {
+            self.opt_level
+        }
+    }
+
     /// Should this build carry the shim that waits before the window closes?
     ///
     /// One predicate, because two places act on the answer — `build` compiles
@@ -369,21 +419,6 @@ impl Default for Program {
 }
 
 impl Program {
-    /// The options a build of this program actually uses.
-    ///
-    /// Identical to `options` except for optimisation: arithmetic done the old
-    /// compiler's way is built without it, whatever level is saved, because
-    /// optimisation is exactly what makes x87 arithmetic stop imitating the old
-    /// machine. The saved level is kept, and applies again if that option is
-    /// turned off.
-    pub fn effective_options(&self) -> BuildOptions {
-        let mut o = self.options.clone();
-        if o.extended_precision {
-            o.opt_level = OptLevel::O0;
-        }
-        o
-    }
-
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: text::nfc(&name.into()),
@@ -559,33 +594,45 @@ mod tests {
         // Optimisation keeps values in registers across statements, so they stop
         // being rounded where the old compiler rounded them. The build therefore
         // ignores the saved level while the option is on -- without touching it.
-        let mut p = Program::new("pile foundation");
-        p.options.opt_level = OptLevel::O2;
+        let caps = FlagCapabilities::optimistic();
+        let mut o = BuildOptions {
+            opt_level: OptLevel::O2,
+            ..Default::default()
+        };
 
-        assert!(p.options.extended_precision, "on by default");
+        assert!(o.old_compiler_arithmetic(&caps), "on by default");
         assert_eq!(
-            p.effective_options().opt_level,
+            o.effective_opt_level(&caps),
             OptLevel::O0,
             "the build must not optimise while imitating the old compiler"
         );
-        assert_eq!(
-            p.options.opt_level,
-            OptLevel::O2,
-            "and the saved level is kept"
-        );
+        assert_eq!(o.opt_level, OptLevel::O2, "and the saved level is kept");
 
-        p.options.extended_precision = false;
+        o.extended_precision = false;
         assert_eq!(
-            p.effective_options().opt_level,
+            o.effective_opt_level(&caps),
             OptLevel::O2,
             "turned off, the saved level applies again"
         );
+    }
 
-        // REAL keeps its size in this mode, so a library built elsewhere is
-        // safe and nothing is withheld from a program that links one.
-        p.options.extended_precision = true;
-        p.libraries.push(LibraryRef::new("/home/u/libaddup.a"));
-        assert!(p.effective_options().extended_precision);
+    #[test]
+    fn without_an_x87_the_saved_level_applies_even_with_the_option_on() {
+        // There is nothing to imitate the old compiler on, so the build is plain
+        // arithmetic -- and plain arithmetic has no reason to give up the level
+        // asked for. Deciding both from one predicate is what keeps the flag and
+        // the level from disagreeing.
+        let arm = FlagCapabilities {
+            x87: false,
+            ..FlagCapabilities::optimistic()
+        };
+        let o = BuildOptions {
+            opt_level: OptLevel::O2,
+            ..Default::default()
+        };
+        assert!(o.extended_precision, "still asked for");
+        assert!(!o.old_compiler_arithmetic(&arm));
+        assert_eq!(o.effective_opt_level(&arm), OptLevel::O2);
     }
 
     use super::*;

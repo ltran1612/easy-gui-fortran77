@@ -34,6 +34,11 @@ C     B. A single-precision divide, in single precision.
 C     C. The oldest trap in the language: a single-precision divide
 C        assigned to a DOUBLE PRECISION gains no digits. It is widened
 C        after the damage, so the low half is zero.
+C
+C        Under the default's x87 arithmetic this holds only because the
+C        compiler folds 1.0/3.0 in single precision while compiling. The
+C        same divide of two variables, done at run time, keeps the x87's
+C        extra digits and the low half is not zero.
       D1 = 1.0/3.0
       WRITE (*,'(A,2I12)') 'C', ID1(1), ID1(2)
 
@@ -48,6 +53,10 @@ C        and which silently changes results near zero.
 C
 C        OPAQUE is in another file, so this division cannot be folded at
 C        compile time and really happens on the machine.
+C
+C        Flushing to zero only ever touches SSE arithmetic, so under the
+C        default's x87 arithmetic this cannot catch it. It still shows
+C        the denormal is kept.
       IT = 8388608
       CALL OPAQUE(T)
       H = T/2.0

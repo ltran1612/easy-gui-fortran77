@@ -1189,6 +1189,12 @@ impl App {
         let lang = self.lang();
         let Some(idx) = self.selected else { return };
         let mut changed = false;
+        // The compiler the build will use, for the one option whose effect
+        // depends on it. Cloned: it is a handful of flags.
+        let caps = match &self.toolchain {
+            ToolchainState::Ready { tc, .. } => Some(tc.capabilities().clone()),
+            _ => None,
+        };
         egui::CollapsingHeader::new(tr!(lang, "options.advanced"))
             .default_open(false)
             .show(ui, |ui| {
@@ -1269,9 +1275,14 @@ impl App {
                     .on_hover_text(tr!(lang, "options.keep_window_open_hint"))
                     .changed();
                 // Doing arithmetic the old compiler's way means building without
-                // optimisation (`Program::effective_options`), so the choice is
-                // shown as not in force rather than left looking like it is.
-                let old_way = o.extended_precision;
+                // optimisation, so the choice is shown as not in force rather than
+                // left looking like it is. Whether that applies is the build's own
+                // rule, asked of the compiler it will use; until that compiler is
+                // known, it is assumed able to.
+                let old_way = match &caps {
+                    Some(c) => o.old_compiler_arithmetic(c),
+                    None => o.extended_precision,
+                };
                 ui.horizontal(|ui| {
                     ui.label(tr!(lang, "options.opt"));
                     ui.add_enabled_ui(!old_way, |ui| {

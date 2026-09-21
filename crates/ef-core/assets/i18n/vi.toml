@@ -72,7 +72,7 @@
 "options.bounds_hint" = "Nên bật. Khi đọc quá phần tử cuối của một mảng, chương trình lấy đúng vùng nhớ nằm kế bên — ra một con số trông hợp lý nhưng sai. Bật mục này thì chương trình dừng lại và báo rõ mảng nào, vị trí nào."
 "options.dlines" = "Coi dòng bắt đầu bằng D là mã lệnh"
 "options.extended" = "Tính toán theo cách của trình biên dịch DOS cũ"
-"options.extended_hint" = "Nên bật. Trình biên dịch DOS cũ tính mỗi phép toán với độ chính xác cao hơn bên trong bộ xử lý, và chỉ làm tròn khi lưu kết quả. Bật mục này thì kết quả khớp với trình biên dịch cũ, kể cả hướng rẽ của chương trình khi so sánh hai con số. Khi bật, chương trình được biên dịch không tối ưu hoá, vì tối ưu hoá làm thay đổi chỗ làm tròn số."
+"options.extended_hint" = "Nên bật. Trình biên dịch DOS cũ tính mỗi phép toán với độ chính xác cao hơn bên trong bộ xử lý, và chỉ làm tròn khi lưu kết quả vào biến. Mục này làm giống như vậy, nên kết quả lưu trong biến khớp với trình biên dịch cũ. Gần giống chứ không hoàn toàn giống. Khi lệnh IF so sánh trực tiếp một phép tính mà không lưu vào biến trước, và hai vế bằng nhau đến chữ số cuối cùng, chương trình có thể rẽ khác với trình biên dịch cũ. Công thức gọi SIN, EXP, ALOG hoặc một hàm tự viết ở giữa chừng thì được làm tròn như cách tính 32 bit thông thường. Khi bật, chương trình được biên dịch không tối ưu hoá, vì tối ưu hoá làm thay đổi chỗ làm tròn số, nên các phép tính dài chạy chậm hơn vài lần."
 "options.opt_off_for_old_way" = "Không áp dụng khi tính toán theo cách của trình biên dịch cũ: tối ưu hoá sẽ làm thay đổi chỗ làm tròn số."
 "options.real8" = "Dùng REAL 8 byte"
 "options.bigstack" = "Mảng lớn"

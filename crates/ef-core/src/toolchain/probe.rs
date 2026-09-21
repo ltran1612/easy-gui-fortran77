@@ -34,6 +34,10 @@ pub struct FlagCapabilities {
     /// `-mfpmath=387`: do scalar floating-point arithmetic on the x87 unit. x86
     /// only -- there is no x87 on ARM, so on an Apple Silicon Mac this is absent.
     pub x87: bool,
+    /// `-ffrontend-optimize`: the front end's own rewriting, which is what
+    /// skips the right-hand side of `.AND.`/`.OR.` once the left has decided.
+    /// Every `-O` level but `-O0` turns it on by itself.
+    pub frontend_optimize: bool,
     /// `-static`: fully static link. Usually unavailable on Linux.
     pub static_full: bool,
     /// `-static-libgfortran -static-libgcc`: the runtime only. Usually available.
@@ -62,6 +66,7 @@ impl FlagCapabilities {
             default_real8: true,
             default_double8: true,
             x87: true,
+            frontend_optimize: true,
             static_full: true,
             static_runtime: true,
             strip: true,
@@ -86,6 +91,7 @@ impl FlagCapabilities {
             default_real8: false,
             default_double8: false,
             x87: false,
+            frontend_optimize: false,
             static_full: false,
             static_runtime: false,
             strip: false,
@@ -114,6 +120,7 @@ const SYNTAX_FLAGS: &[(&str, FlagSetter)] = &[
     ("-fdefault-real-8", |c, v| c.default_real8 = v),
     ("-fdefault-double-8", |c, v| c.default_double8 = v),
     ("-mfpmath=387", |c, v| c.x87 = v),
+    ("-ffrontend-optimize", |c, v| c.frontend_optimize = v),
 ];
 
 /// Probe a compiler's optional flags.

@@ -32,8 +32,9 @@ OPTIONS:
     --no-dec         disable DEC/Microsoft extensions
     --no-static      disable static local storage and zero-init
     --no-bounds      do not stop when an array is used past its end
-    --no-extended    plain 32-bit arithmetic instead of the old compiler's x87 way
-                     (which also switches optimisation back on)
+    --no-extended    plain arithmetic -- 32-bit REAL, 64-bit DOUBLE PRECISION --
+                     instead of the old compiler's x87 way, with optimisation
+                     back on
     --preprocess     run the C preprocessor (rarely wanted)
     --strip          strip the saved program (smaller file, no debug info)
     --no-keep-open   let the program exit without waiting for a key (Windows only)

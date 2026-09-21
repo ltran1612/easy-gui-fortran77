@@ -7,7 +7,7 @@
 //! possible. That keeps the user's possibly-non-ASCII work path out of argv entirely.
 
 use crate::paths::WorkLayout;
-use crate::project::{BuildOptions, Dialect, Preprocess};
+use crate::project::{BuildOptions, Dialect, OptLevel, Preprocess};
 use crate::toolchain::probe::FlagCapabilities;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -73,10 +73,11 @@ fn dialect_flags(opts: &BuildOptions, caps: &FlagCapabilities, out: &mut Vec<OsS
     if caps.allow_invalid_boz {
         out.push("-fallow-invalid-boz".into());
     }
-    if opts.extended_precision && caps.x87 {
+    if opts.old_compiler_arithmetic(caps) {
         // Arithmetic on the x87 unit, the way the DOS compiler did it. REAL
-        // stays 32 bits in memory; only the arithmetic changes. The `-O0` this
-        // depends on comes from `Program::effective_options`, not from here.
+        // stays 32 bits in memory; only the arithmetic changes. The `-O0` it
+        // depends on is `BuildOptions::effective_opt_level`, decided from the
+        // same predicate so the two cannot disagree.
         out.push("-mfpmath=387".into());
     }
     if opts.check_bounds && caps.check_bounds {
@@ -111,7 +112,16 @@ pub fn compile_args(
     a.push("-c".into());
 
     dialect_flags(opts, caps, &mut a);
-    a.push(opts.opt_level.flag().into());
+    let level = opts.effective_opt_level(caps);
+    a.push(level.flag().into());
+    if level == OptLevel::O0 && caps.frontend_optimize {
+        // -O0 also switches off the front end's rewriting, and with it the
+        // skipping of the right-hand side of `.AND.`/`.OR.` once the left has
+        // decided. Old code leans on that: `IF (J .NE. 0 .AND. K/J .GT. 1)`
+        // divides by zero and crashes without it. Every other level has it on
+        // already, and it leaves the arithmetic as it was.
+        a.push("-ffrontend-optimize".into());
+    }
 
     if caps.max_errors {
         // A runaway error cascade can emit hundreds of megabytes.
@@ -261,7 +271,7 @@ fn rel(layout: &WorkLayout, p: &Path) -> OsString {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::{LineLength, OptLevel};
+    use crate::project::LineLength;
 
     fn fixture() -> (WorkLayout, StagedSource) {
         let layout = WorkLayout::new(PathBuf::from("/work/build-1"));
@@ -301,7 +311,8 @@ mod tests {
             "-fno-range-check",
             "-fallow-invalid-boz",
             "-fmax-errors=25",
-            "-O1",
+            "-O0",
+            "-ffrontend-optimize",
             "-I/home/user",
         ] {
             assert!(
@@ -651,6 +662,11 @@ mod tests {
 
         let shipped = args(&BuildOptions::default());
         assert!(shipped.contains(&"-mfpmath=387".to_string()), "{shipped:?}");
+        assert!(shipped.contains(&"-O0".to_string()), "{shipped:?}");
+        assert!(
+            !shipped.iter().any(|f| f == "-O1" || f == "-O2"),
+            "x87 arithmetic must never reach the compiler with optimisation on: {shipped:?}"
+        );
         assert!(
             !shipped.iter().any(|f| f.starts_with("-freal-")),
             "REAL must keep its size; only the arithmetic changes: {shipped:?}"
@@ -661,6 +677,7 @@ mod tests {
             ..Default::default()
         });
         assert!(!off.iter().any(|f| f.starts_with("-mfpmath")), "{off:?}");
+        assert!(off.contains(&"-O1".to_string()), "the saved level: {off:?}");
 
         // It changes where arithmetic happens, not how big REAL is, so it no
         // longer has to give way to 8-byte REAL. Both apply together.
@@ -686,6 +703,52 @@ mod tests {
             &[],
         ));
         assert!(!a.iter().any(|f| f.starts_with("-mfpmath")), "{a:?}");
+        assert!(
+            a.contains(&"-O1".to_string()),
+            "and plain arithmetic keeps the level asked for: {a:?}"
+        );
+    }
+
+    #[test]
+    fn building_without_optimisation_still_skips_what_and_or_need_not_evaluate() {
+        // `IF (J .NE. 0 .AND. K/J .GT. 1)` relies on the division never being
+        // reached when J is 0. -O0 takes that away unless the front end's
+        // rewriting is asked for by name -- whether -O0 was forced by the old
+        // compiler's arithmetic or chosen.
+        let (layout, src) = fixture();
+        let caps = FlagCapabilities::optimistic();
+        let args = |o: &BuildOptions| strings(&compile_args(&caps, &[], o, &src, &layout, &[]));
+        let fe = "-ffrontend-optimize".to_string();
+
+        assert!(args(&BuildOptions::default()).contains(&fe), "forced -O0");
+        let chosen = BuildOptions {
+            extended_precision: false,
+            opt_level: OptLevel::O0,
+            ..Default::default()
+        };
+        assert!(args(&chosen).contains(&fe), "chosen -O0");
+
+        // Every other level turns it on by itself; naming it there is noise.
+        let optimised = BuildOptions {
+            extended_precision: false,
+            ..Default::default()
+        };
+        assert!(!args(&optimised).contains(&fe), "-O1 has it already");
+
+        // And a compiler that does not know the flag is not handed it.
+        let old = FlagCapabilities {
+            frontend_optimize: false,
+            ..FlagCapabilities::optimistic()
+        };
+        let a = strings(&compile_args(
+            &old,
+            &[],
+            &BuildOptions::default(),
+            &src,
+            &layout,
+            &[],
+        ));
+        assert!(!a.contains(&fe), "{a:?}");
     }
 
     #[test]
@@ -930,10 +993,13 @@ mod tests {
     }
 
     #[test]
-    fn optimisation_level_is_honoured() {
+    fn optimisation_level_is_honoured_for_plain_arithmetic() {
+        // With the old compiler's arithmetic on, the level is never honoured;
+        // `arithmetic_is_done_the_old_compilers_way_by_default` covers that.
         let (layout, src) = fixture();
         let o = BuildOptions {
             opt_level: OptLevel::O2,
+            extended_precision: false,
             ..Default::default()
         };
         let a = strings(&compile_args(

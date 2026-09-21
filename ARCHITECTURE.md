@@ -131,12 +131,12 @@ skip into a failure, and CI sets it so the corpus can never be silently skipped.
 Wrapped around every corpus case is the one assertion the product exists for: the
 source tree is byte-identical before and after.
 
-**Arithmetic is done the old compiler's way by default**: `-mfpmath=387` at
-`-O0`. The DOS compiler worked each expression out at extended precision on the
-x87 unit and rounded only when it stored a variable. Measured against a model
-of it, three candidates:
+**Arithmetic is done the old compiler's way by default, as nearly as gfortran
+can**: `-mfpmath=387` at `-O0`. Microsoft FORTRAN 3.30 worked each expression
+out at extended precision on the x87 unit and rounded when it stored a variable.
+Measured against a model of that, three candidates:
 
-| | keeps `(1.0E7 + 0.3) − 1.0E7` | equality decisions matching it |
+| | keeps `(A + B) − A`, A = 1.0E7, B = 0.3 | exact comparisons of stored values matching it |
 |---|---|---|
 | plain 32-bit | no — `0.0` | 1600 / 1600 |
 | `REAL` widened to 80 bits (`-freal-4-real-10`, 0.1.14) | yes | 1527 / 1600 |
@@ -147,20 +147,68 @@ round to the same number can differ in the 19th digit and send a comparison the
 other way. `-mfpmath=387 -ffloat-store` looks like the fix for x87's
 optimisation-dependence and is not: it also rounds the compiler's hidden
 temporaries, so it loses the `0.3` too. `-O0` is what works — every variable is
-written back after every statement, exactly as a 1985 compiler did — and
-`Program::effective_options` enforces it. `REAL` stays 4 bytes throughout, so no
-storage hazard applies and a library built elsewhere still gets the values it
-expects.
+written back after every statement, exactly as a 1985 compiler did. At `-O1` the
+imitation fails twice over: values stay in registers across statements, and a
+formula whose inputs the compiler can see is worked out while compiling, in 32
+bits. `REAL` stays 4 bytes throughout, so no storage hazard applies and a
+library built elsewhere still gets the values it expects.
 
-**`tests/precision.rs` pins the four things that make that true**, each chosen
-so it fails if the mode stops working: `REAL` stays 4 bytes (0.1 read back
-through `EQUIVALENCE` as `0x3DCCCCCD`); the `0.3` survives where plain 32-bit
-loses it; asking for `-O1` or `-O2` changes nothing; and two exact comparisons
-go the way the old compiler sent them rather than the way 80 bits did. Removing
-the `-O0` enforcement fails two of them; switching back to 80 bits fails three.
-`corpus/precision` pins IEEE single-precision facts under the shipped default —
-the widened-single trap, denormals, unreassociated accumulation, integer
-truncation, mixed mode — which hold because values are still stored at 32 bits.
+**It is not the old compiler.** Checked against Microsoft FORTRAN 3.30 itself,
+run under DOSBox, the old compiler was a hybrid that no gfortran setting copies:
+
+| | Microsoft FORTRAN 3.30 | plain 32-bit | x87 at `-O0` |
+|---|---|---|---|
+| formula stored in a variable, `C = (A + B) - A` | extended, rounded on store | loses the 0.3 | **matches** |
+| calculation compared directly, `IF (X*100.0 .LT. R)` | rounds each side to `REAL` first | **matches** | differs when the sides agree to the last digit: 48 / 99 `.LT.`, 89 / 99 `.EQ.` |
+| call partway through a formula, `(A + B + SIN(Z)) - A` | keeps extended | loses the 0.3 | loses the 0.3: the value so far is stored at 32 bits before the call |
+| formula of literals only, `(1.0E7 + 0.3) - 1.0E7` | keeps the 0.3 | `0.0` | `0.0`: folded while compiling |
+| `INT(X*100.0)`, or assignment to `INTEGER` | truncates the extended value | differs, 48 / 99 | differs, 48 / 99 |
+
+Two more consequences of moving the arithmetic, neither visible in `REAL`
+alone. `DOUBLE PRECISION` moves to the x87 as well, so its intermediates are
+extended too — as they were on the old machine, and unlike plain 64-bit. And a
+`REAL` is copied through the x87, so integer or text data kept in one by
+`EQUIVALENCE` can change on the way: a bit pattern that is a signalling NaN comes
+out quietened, where the old compiler copied bytes.
+
+It stays the default because legacy engineering code mostly works a formula out,
+stores it, and compares stored variables — the rows this gets right. A
+calculation compared directly is safe in every setting once it is stored in a
+variable first.
+
+`-O0` costs speed: about 9× on a 400 × 400 matrix product against `-O1`, which
+at the sizes these programs run is a fraction of a millisecond. It also switches
+off `-ffrontend-optimize`, and with it the skipping of the right-hand side of
+`.AND.`/`.OR.` once the left has decided — so `IF (J .NE. 0 .AND. K/J .GT. 1)`
+divides by zero and crashes. Every `-O0` build therefore asks for
+`-ffrontend-optimize` by name; it restores the skipping and leaves the arithmetic
+as it was.
+
+One predicate decides all of it: `BuildOptions::old_compiler_arithmetic` — the
+option is on *and* the compiler has an x87. The `-mfpmath=387`, the level from
+`BuildOptions::effective_opt_level`, and whether the window greys the level out
+are all read from it, so a compiler without an x87 builds plain arithmetic at
+the level asked for, not at a pointless `-O0`.
+
+**`tests/precision.rs` pins what it gets right**, each check chosen so it fails
+if the mode stops working: `REAL` stays 4 bytes (0.1 read back through
+`EQUIVALENCE` as `0x3DCCCCCD`); the `0.3` survives where plain 32-bit loses it;
+asking for `-O1` or `-O2` changes nothing, checked for the right digits and not
+only for agreement; two exact comparisons of stored values go the way the old
+compiler sent them rather than the way 80 bits did; and the `.AND.` guard above
+runs cleanly. Every program there must exit cleanly, so a build that produced
+nothing cannot pass by comparing nothing with nothing. Removing the `-O0`
+enforcement fails two of the checks; dropping `-ffrontend-optimize` fails the
+guard.
+
+`corpus/precision` pins IEEE facts under the shipped default: `REAL` is 4 bytes,
+single-precision stores, unreassociated accumulation, integer division and
+`MOD`, mixed mode. Two of its checks no longer test what they were written for
+under x87. The denormal check cannot see flush-to-zero, which only ever touches
+SSE arithmetic. The widened-single check (`D = 1.0/3.0` gains no digits) passes
+because the compiler folds the literal division in 32 bits; the same division of
+two variables at run time does gain them under x87. Plain arithmetic, the
+option turned off, is not run through the corpus.
 
 ## Things that look wrong and are not
 
@@ -180,13 +228,13 @@ truncation, mixed mode — which hold because values are still stored at 32 bits
   option is simply inert off Windows — `wants_pause_shim` gates on the
   toolchain's exe suffix, not the host.
 - **The optimisation level is ignored by default.** Not a bug:
-  `Program::effective_options` forces `-O0` while arithmetic is done the old
-  compiler's way, because optimisation keeps values in registers across
-  statements and so changes where they get rounded. The saved level is kept and
-  applies again if that option is turned off, and the window greys the setting
-  out and says why. The compile and link steps read `effective_options`; the
-  pause-shim check still reads `options`, harmlessly, since nothing about the
-  shim depends on arithmetic.
+  `BuildOptions::effective_opt_level` forces `-O0` while arithmetic is done the
+  old compiler's way, because optimisation changes where values get rounded. The
+  saved level is kept and applies again if that option is turned off — or if the
+  compiler has no x87 to do it on. The window greys the setting out and says why.
+- **`-ffrontend-optimize` on a build that is not optimised.** `-O0` switches it
+  off, and it is what makes `.AND.`/`.OR.` skip their right-hand side; old code
+  guards divisions that way. It changes no arithmetic.
 - **`objfmt` parses OMF rather than sniffing its first byte.** `0xF0` is an OMF
   library header and also `đ` in the Vietnamese codepage the user's comments are
   written in.

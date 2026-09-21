@@ -72,7 +72,7 @@
 "options.bounds_hint" = "Recommended. Reading past the end of an array gives whatever happens to be next in memory — a number that looks reasonable and is wrong. With this on, the program stops and says which array and which position instead."
 "options.dlines" = "Treat lines starting with D as code"
 "options.extended" = "Do the arithmetic the way the old DOS compiler did"
-"options.extended_hint" = "Recommended. The old DOS compiler worked out each calculation at extra precision inside the processor and rounded only when it stored a result. With this on, results match the old compiler, including which way the program goes when it compares two numbers. Programs are built without optimisation while it is on, because optimisation changes where the rounding happens."
+"options.extended_hint" = "Recommended. The old DOS compiler worked out each calculation at extra precision inside the processor and rounded only when it stored the result in a variable. This does the same, so results stored in variables match it. It is close, not exact. When an IF compares a calculation directly, without storing it in a variable first, and the two sides are equal to the last digit, the program can go the other way from the old compiler. A formula that calls SIN, EXP, ALOG or a function of your own partway through is rounded as plain 32-bit arithmetic would. Programs are built without optimisation while this is on, because optimisation changes where the rounding happens, so long calculations run several times slower."
 "options.opt_off_for_old_way" = "Not used while the arithmetic is done the old compiler's way: optimisation would change where the numbers are rounded."
 "options.real8" = "Use 8-byte REAL"
 "options.bigstack" = "Large arrays"

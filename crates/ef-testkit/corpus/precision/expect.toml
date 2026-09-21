@@ -1,4 +1,4 @@
-description = "Arithmetic under the settings the application ships, pinned to IEEE 754 single-precision facts. The default does its arithmetic the old compiler's way, on the x87 unit, but still stores REAL at 32 bits -- so every value read back here is single precision's, exactly."
+description = "Arithmetic under the settings the application ships, pinned to IEEE 754 facts. The default does its arithmetic the old compiler's way, on the x87 unit, but still stores REAL at 32 bits, so each value read back here is what was stored. Two checks are weaker under x87 than they read: E cannot see flush-to-zero, which only touches SSE arithmetic, and C holds because the compiler folds 1.0/3.0 in 32 bits -- the same division of two variables at run time does gain digits."
 sources = ["PRECIS.FOR", "OPAQUE.FOR"]
 success = true
 run = true

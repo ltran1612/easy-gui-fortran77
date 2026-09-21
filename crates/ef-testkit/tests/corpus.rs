@@ -29,7 +29,8 @@ struct Expect {
     undefined_symbol: bool,
     creates_beside_the_program: Vec<String>,
     line_length: Option<String>,
-    /// Pin a case to 32-bit or 80-bit REAL rather than the shipped default.
+    /// Pin a case to plain arithmetic (`false`) or the old compiler's x87
+    /// arithmetic (`true`) rather than the shipped default.
     extended_precision: Option<bool>,
 }
 
