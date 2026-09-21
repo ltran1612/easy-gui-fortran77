@@ -131,16 +131,23 @@ skip into a failure, and CI sets it so the corpus can never be silently skipped.
 Wrapped around every corpus case is the one assertion the product exists for: the
 source tree is byte-identical before and after.
 
-**`corpus/precision` pins the arithmetic itself.** Its expected values are IEEE
-754 facts worked out away from this toolchain, read as bit patterns through
-`EQUIVALENCE` so no `WRITE` formatting sits between the arithmetic and the
-assertion. It covers single-precision storage, the widened-single trap in a
-`DOUBLE PRECISION` assignment, denormals surviving (a zero there means something
-turned on flush-to-zero), unreassociated accumulation, integer truncation and
-mixed-mode evaluation. `tests/precision.rs` then asserts the two directions that
-pinning alone leaves open: `-O0`, `-O1` and `-O2` must agree to the digit, and
-turning on `default_real8` must *disagree* — the second is what stops the first
-from passing for reasons unrelated to arithmetic.
+**`REAL` is 80-bit by default** (`-freal-4-real-10`), for fidelity rather than
+extra digits: the DOS compiler this replaces ran on the x87 unit at 80 bits
+internally, and plain 32-bit arithmetic loses things it kept —
+`(1.0E7 + 0.3) − 1.0E7` is `0.3` there and `0.0` in 32 bits. It is done by
+widening `REAL` rather than with `-mfpmath=387`, because the x87 registers give
+a different answer at `-O0` than at `-O1`.
+
+**`tests/precision.rs` pins all three precisions** against bit patterns worked
+out from each format's definition, read through `EQUIVALENCE` so no `WRITE`
+formatting sits between the arithmetic and the assertion: 32-bit, 80-bit and
+64-bit must each give their own value, which proves both what ships and that the
+assertions are watching the arithmetic at all. Each precision must also agree
+with itself at `-O0`, `-O1` and `-O2`. `corpus/precision` keeps its IEEE
+single-precision facts — the widened-single trap, denormals surviving,
+unreassociated accumulation, integer truncation, mixed mode — pinned to 32-bit
+explicitly, since they are still true of the arithmetic a user gets with
+extended precision off.
 
 ## Things that look wrong and are not
 
@@ -159,6 +166,13 @@ from passing for reasons unrelated to arithmetic.
   wrap that works on MinGW does not fire on Linux. Opposite mechanisms, so the
   option is simply inert off Windows — `wants_pause_shim` gates on the
   toolchain's exe suffix, not the host.
+- **Extended precision is silently dropped for a program that links a
+  library.** Not a bug: `Program::effective_options` does it on purpose. A
+  prebuilt library was compiled elsewhere, almost certainly with 32-bit `REAL`,
+  and handing it 80-bit arguments reads the wrong bytes — `ADDUP(2.0, 40.0)`
+  came back `0.0`, with no error. So such a program builds in 32-bit, and the
+  window says so beside the option rather than leaving a ticked box that is not
+  in force. The build reads `effective_options`, never `options` directly.
 - **`objfmt` parses OMF rather than sniffing its first byte.** `0xF0` is an OMF
   library header and also `đ` in the Vietnamese codepage the user's comments are
   written in.

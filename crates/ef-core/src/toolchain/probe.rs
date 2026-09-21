@@ -31,6 +31,9 @@ pub struct FlagCapabilities {
     /// `-fdefault-double-8`: keep DOUBLE PRECISION at eight bytes when REAL is
     /// promoted, instead of letting it become quad.
     pub default_double8: bool,
+    /// `-freal-4-real-10`: make REAL the 80-bit extended type. x86 only — there
+    /// is no kind 10 on ARM, so on an Apple Silicon Mac this is simply absent.
+    pub real10: bool,
     /// `-static`: fully static link. Usually unavailable on Linux.
     pub static_full: bool,
     /// `-static-libgfortran -static-libgcc`: the runtime only. Usually available.
@@ -58,6 +61,7 @@ impl FlagCapabilities {
             max_stack_var_size: true,
             default_real8: true,
             default_double8: true,
+            real10: true,
             static_full: true,
             static_runtime: true,
             strip: true,
@@ -81,6 +85,7 @@ impl FlagCapabilities {
             max_stack_var_size: false,
             default_real8: false,
             default_double8: false,
+            real10: false,
             static_full: false,
             static_runtime: false,
             strip: false,
@@ -108,6 +113,7 @@ const SYNTAX_FLAGS: &[(&str, FlagSetter)] = &[
     ("-fmax-stack-var-size=0", |c, v| c.max_stack_var_size = v),
     ("-fdefault-real-8", |c, v| c.default_real8 = v),
     ("-fdefault-double-8", |c, v| c.default_double8 = v),
+    ("-freal-4-real-10", |c, v| c.real10 = v),
 ];
 
 /// Probe a compiler's optional flags.

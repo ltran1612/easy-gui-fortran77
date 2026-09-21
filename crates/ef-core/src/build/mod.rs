@@ -162,6 +162,9 @@ fn build_inner(
         program,
         objfmt::Expect::for_exe_suffix(toolchain.exe_suffix()),
     )?;
+    // What this build actually compiles with -- the program's options, less
+    // anything that cannot safely apply to it. See `Program::effective_options`.
+    let options = program.effective_options();
 
     let caps = toolchain.capabilities();
     let total = staging.sources.len();
@@ -187,7 +190,7 @@ fn build_inner(
         cmd.args(args::compile_args(
             caps,
             toolchain.compile_flags(),
-            &program.options,
+            &options,
             src,
             layout,
             &staging.include_dirs,
@@ -257,7 +260,7 @@ fn build_inner(
     cmd.args(args::link_args(
         caps,
         toolchain.link_flags(),
-        &program.options,
+        &options,
         &objs,
         &staging.libraries,
         layout,

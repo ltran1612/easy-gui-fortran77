@@ -29,6 +29,8 @@ struct Expect {
     undefined_symbol: bool,
     creates_beside_the_program: Vec<String>,
     line_length: Option<String>,
+    /// Pin a case to 32-bit or 80-bit REAL rather than the shipped default.
+    extended_precision: Option<bool>,
 }
 
 impl Default for Expect {
@@ -46,6 +48,7 @@ impl Default for Expect {
             undefined_symbol: false,
             creates_beside_the_program: Vec::new(),
             line_length: None,
+            extended_precision: None,
         }
     }
 }
@@ -152,6 +155,9 @@ fn every_corpus_case_behaves_as_documented() {
         let mut program = Program::new(&case.name);
         for s in &case.expect.sources {
             program.sources.push(SourceRef::new(sources_dir.join(s)));
+        }
+        if let Some(ext) = case.expect.extended_precision {
+            program.options.extended_precision = ext;
         }
         if let Some(ll) = &case.expect.line_length {
             program.options.line_length = match ll.as_str() {

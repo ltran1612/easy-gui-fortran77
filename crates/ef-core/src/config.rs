@@ -277,6 +277,11 @@ fn migrate_programs(mut f: ProgramsFile, from: u32) -> ProgramsFile {
             p.options.keep_window_open = true;
         }
     }
+    // Not a migration -- a contradiction resolved every load, so it holds
+    // however the file came to contain it. See `BuildOptions::normalize`.
+    for p in &mut f.programs {
+        p.options.normalize();
+    }
     ProgramsFile {
         schema_version: PROGRAMS_SCHEMA,
         ..f
@@ -470,6 +475,42 @@ mod tests {
             }
             other => panic!("expected recovery from backup, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_saved_8_byte_choice_survives_the_new_80_bit_default() {
+        // A program saved with 8-byte REAL, before extended precision existed,
+        // loads with `extended_precision` missing -- so it would default to true
+        // and both would be on. The explicit choice has to survive, and the
+        // window has to show only the one that applies.
+        let (td, mut s) = store();
+        let path = AppPaths::under(td.path()).programs_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "schema_version = 2\n\n[[program]]\nid = \"a\"\nname = \"R8\"\n\n\
+             [program.options]\ndefault_real8 = true\n\n\
+             [[program]]\nid = \"b\"\nname = \"Plain\"\n\n\
+             [program.options]\ndefault_real8 = false\n",
+        )
+        .unwrap();
+
+        let (back, _) = s.load_programs().unwrap();
+        let r8 = &back[0].options;
+        assert!(
+            r8.default_real8,
+            "the deliberate 8-byte choice must be kept"
+        );
+        assert!(
+            !r8.extended_precision,
+            "and must not be shown alongside the 80-bit default it overrides"
+        );
+
+        let plain = &back[1].options;
+        assert!(
+            plain.extended_precision && !plain.default_real8,
+            "a program that chose nothing gets the new default"
+        );
     }
 
     #[test]

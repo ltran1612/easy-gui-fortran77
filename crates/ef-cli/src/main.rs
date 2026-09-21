@@ -32,6 +32,7 @@ OPTIONS:
     --no-dec         disable DEC/Microsoft extensions
     --no-static      disable static local storage and zero-init
     --no-bounds      do not stop when an array is used past its end
+    --no-extended    ordinary 32-bit REAL instead of 80-bit extended precision
     --preprocess     run the C preprocessor (rarely wanted)
     --strip          strip the saved program (smaller file, no debug info)
     --no-keep-open   let the program exit without waiting for a key (Windows only)
@@ -45,6 +46,7 @@ struct Opts {
     no_dec: bool,
     no_static: bool,
     no_bounds: bool,
+    no_extended: bool,
     preprocess: bool,
     strip: bool,
     no_keep_open: bool,
@@ -117,6 +119,7 @@ fn parse(args: &[String]) -> Result<Opts> {
         no_dec: false,
         no_static: false,
         no_bounds: false,
+        no_extended: false,
         preprocess: false,
         strip: false,
         no_keep_open: false,
@@ -130,6 +133,7 @@ fn parse(args: &[String]) -> Result<Opts> {
             "--no-dec" => o.no_dec = true,
             "--no-static" => o.no_static = true,
             "--no-bounds" => o.no_bounds = true,
+            "--no-extended" => o.no_extended = true,
             "--preprocess" => o.preprocess = true,
             "--strip" => o.strip = true,
             "--no-keep-open" => o.no_keep_open = true,
@@ -293,6 +297,9 @@ fn program_from(o: &Opts) -> Result<Program> {
     if o.no_bounds {
         p.options.check_bounds = false;
     }
+    if o.no_extended {
+        p.options.extended_precision = false;
+    }
     if o.preprocess {
         p.options.preprocess = Preprocess::Always;
     }
@@ -312,6 +319,15 @@ fn do_build(o: &Opts) -> Result<(AppPaths, build::BuildOutcome, WorkLayout)> {
     let guard = FsGuard::new(paths.write_roots().to_vec())?;
     let tc = find_toolchain()?;
 
+    let program = program_from(o)?;
+    if program.extended_precision_withheld() && !o.json {
+        eprintln!(
+            "note: extended precision is not used for this program, because it \
+             links a library built elsewhere that almost certainly expects \
+             32-bit REAL; building in 32-bit instead"
+        );
+    }
+
     // The same check the window makes before its first build, and for the same
     // reason: a compiler that cannot be shown to be the one we shipped is not
     // used at all. Doing it only in `doctor` meant the command that actually
@@ -326,7 +342,6 @@ fn do_build(o: &Opts) -> Result<(AppPaths, build::BuildOutcome, WorkLayout)> {
 
     let layout = WorkLayout::new(paths.build_dir(1));
     let cancel = AtomicBool::new(false);
-    let program = program_from(o)?;
     let outcome = build::build(&guard, &tc, &layout, &program, None, &cancel);
     Ok((paths, outcome, layout))
 }

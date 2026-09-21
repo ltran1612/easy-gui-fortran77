@@ -101,6 +101,29 @@ pub struct BuildOptions {
     /// by an earlier build stop being readable, and `EQUIVALENCE` overlays see
     /// different bytes.
     pub default_real8: bool,
+    /// `-freal-4-real-10`: carry every REAL as an 80-bit extended value.
+    ///
+    /// On by default, and the reason is fidelity rather than extra digits. The
+    /// DOS compiler this replaces did its arithmetic on the x87 unit, at 80 bits
+    /// inside the processor, rounding to 32 only when it stored a variable. Plain
+    /// 32-bit arithmetic is therefore not a faithful copy of it: an expression
+    /// mixing large and small values -- `(1.0E7 + 0.3) - 1.0E7` -- gave 0.3 on the
+    /// old machine and gives 0.0 in 32 bits, wrong in the first decimal place.
+    /// Carried at 80 bits throughout, it agrees with the old machine to four
+    /// decimal places in every case measured, and gives the same answer at every
+    /// optimisation level. (Using the x87 unit's registers directly, via
+    /// `-mfpmath=387`, imitates the old machine more literally but gives
+    /// different answers at `-O0` and `-O1`, so it is not used.)
+    ///
+    /// It changes REAL's storage size, which matters only for programs that
+    /// overlay memory -- `EQUIVALENCE`, `COMMON` shared with code built
+    /// differently, unformatted files written by an earlier build, or a
+    /// precompiled library expecting 32-bit arguments. For those it can be
+    /// turned off. DOUBLE PRECISION is left at 64 bits either way.
+    ///
+    /// Yields to `default_real8`: both redefine REAL, and an explicit choice of
+    /// 8 bytes is a deliberate one. See `wants_extended_precision`.
+    pub extended_precision: bool,
     /// Large local arrays overflow the 1 MB Windows stack.
     pub big_stack: bool,
     /// `-fcheck=bounds`: stop the program when an array index is outside the
@@ -151,6 +174,28 @@ impl BuildOptions {
     ///
     /// Gated on the *toolchain's* suffix rather than the host, so a Windows
     /// program cross-built from Linux still gets it.
+    /// Resolve the one contradiction these options can express.
+    ///
+    /// `default_real8` and `extended_precision` both redefine REAL. A program
+    /// saved before extended precision existed, with 8-byte REAL switched on,
+    /// loads with both true: the new field is missing and so takes its default.
+    /// The build already lets 8-byte win (`wants_extended_precision`); this makes
+    /// what the window shows agree with what the build does, instead of showing
+    /// both boxes ticked while only one applies. It keeps the explicit choice and
+    /// drops the default nobody made, so it overrides nothing.
+    pub fn normalize(&mut self) {
+        if self.default_real8 {
+            self.extended_precision = false;
+        }
+    }
+
+    pub fn wants_extended_precision(&self) -> bool {
+        // One predicate, so the two options that both redefine REAL can never
+        // be emitted together. `default_real8` wins because nobody turns it on
+        // by accident; `extended_precision` is on by default.
+        self.extended_precision && !self.default_real8
+    }
+
     pub fn wants_pause_shim(&self, exe_suffix: &str) -> bool {
         self.keep_window_open && exe_suffix.eq_ignore_ascii_case(".exe")
     }
@@ -165,6 +210,7 @@ impl Default for BuildOptions {
             static_storage: true,
             d_lines_as_code: false,
             default_real8: false,
+            extended_precision: true,
             big_stack: false,
             check_bounds: true,
             strip_symbols: false,
@@ -341,6 +387,35 @@ impl Default for Program {
 }
 
 impl Program {
+    /// True when extended precision is switched on but cannot apply, because
+    /// this program links a library built somewhere else.
+    ///
+    /// The window uses this to say so, next to the option, rather than leave
+    /// the user believing a setting is in force that is not.
+    pub fn extended_precision_withheld(&self) -> bool {
+        self.options.wants_extended_precision() && !self.libraries.is_empty()
+    }
+
+    /// The options a build of this program actually uses.
+    ///
+    /// Identical to `options`, except that extended precision is withheld from
+    /// a program that links a prebuilt library. Extended precision changes what
+    /// REAL is, and a library the user added was compiled elsewhere -- almost
+    /// certainly with ordinary 32-bit REAL, and there is no way to find out. The
+    /// two cannot pass values to each other: an 80-bit argument handed to a
+    /// routine expecting 32 bits is read from the wrong bytes. Measured:
+    /// `CALL ADDUP(2.0, 40.0, X)` against a prebuilt ADDUP returned 0.0, not
+    /// 42.0 -- no error, no warning, just a wrong number. So a program that links
+    /// a library is built in 32 bits, which is exactly what it was before this
+    /// option existed.
+    pub fn effective_options(&self) -> BuildOptions {
+        let mut o = self.options.clone();
+        if self.extended_precision_withheld() {
+            o.extended_precision = false;
+        }
+        o
+    }
+
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: text::nfc(&name.into()),
@@ -511,6 +586,31 @@ pub fn now_rfc3339() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn extended_precision_is_withheld_from_a_program_that_links_a_library() {
+        let mut p = Program::new("with a library");
+        assert!(p.effective_options().extended_precision, "on by default");
+        assert!(!p.extended_precision_withheld());
+
+        p.libraries.push(LibraryRef::new("/home/u/libaddup.a"));
+        assert!(
+            p.extended_precision_withheld(),
+            "a prebuilt library was compiled elsewhere, almost certainly in 32-bit"
+        );
+        assert!(
+            !p.effective_options().extended_precision,
+            "so the build must not hand it 80-bit arguments"
+        );
+        assert!(
+            p.options.extended_precision,
+            "without touching the setting the user saved"
+        );
+
+        // Already off: nothing is being withheld, so nothing to say.
+        p.options.extended_precision = false;
+        assert!(!p.extended_precision_withheld());
+    }
+
     use super::*;
 
     #[test]

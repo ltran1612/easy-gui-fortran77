@@ -78,6 +78,28 @@ fn output_with(tc: &Toolchain, tmp: &Path, n: u64, options: BuildOptions) -> Str
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// The low 32 bits of REAL 0.1, read through `EQUIVALENCE` as an INTEGER, in
+/// each of the three precisions a user can choose. Each one worked out from the
+/// definition of the format rather than taken from the compiler:
+///
+/// ```text
+/// 32-bit single    0.1 rounds to 0x3DCCCCCD                     1036831949
+/// 80-bit extended  significand round(2^67 / 10) = 0xCCCCCCCCCCCCCCCD,
+///                  low word 0xCCCCCCCD                          -858993459
+/// 64-bit double    0.1 rounds to 0x3FB999999999999A,
+///                  low word 0x9999999A                         -1717986918
+/// ```
+const SINGLE: &str = "A  1036831949";
+const EXTENDED: &str = "A  -858993459";
+const DOUBLE: &str = "A -1717986918";
+
+fn single() -> BuildOptions {
+    BuildOptions {
+        extended_precision: false,
+        ..Default::default()
+    }
+}
+
 #[test]
 fn the_numbers_do_not_move_when_the_optimiser_does() {
     // The optimiser is allowed to make the program faster. It is not allowed to
@@ -85,53 +107,60 @@ fn the_numbers_do_not_move_when_the_optimiser_does() {
     // -ffast-math and its relatives, which this application never passes. The
     // day one of those arrives by way of the advanced "extra flags" box, or by
     // way of a well-meant default, this is what notices.
+    //
+    // Checked in both precisions a user can pick, because it is a property of
+    // each. It is also the reason extended precision is done by making REAL
+    // 80 bits wide rather than by using the x87 registers: the registers give a
+    // different answer at -O0 than at -O1.
     let Some(tc) = toolchain() else { return };
     let tmp = tempfile::tempdir().unwrap();
+    let mut n = 0;
 
-    let at = |n, level| {
-        output_with(
-            &tc,
-            tmp.path(),
-            n,
-            BuildOptions {
-                opt_level: level,
-                ..Default::default()
-            },
-        )
-    };
-    let o0 = at(1, OptLevel::O0);
-    let o1 = at(2, OptLevel::O1);
-    let o2 = at(3, OptLevel::O2);
-
-    assert_eq!(
-        o0, o1,
-        "-O0 and -O1 disagree about arithmetic:\n{o0}\nvs\n{o1}"
-    );
-    assert_eq!(
-        o1, o2,
-        "-O1 and -O2 disagree about arithmetic:\n{o1}\nvs\n{o2}"
-    );
-    assert!(o1.contains("A  1036831949"), "sanity: {o1}");
+    for (name, base, fact) in [
+        ("80-bit, the default", BuildOptions::default(), EXTENDED),
+        ("32-bit", single(), SINGLE),
+    ] {
+        let mut at = |level| {
+            n += 1;
+            output_with(
+                &tc,
+                tmp.path(),
+                n,
+                BuildOptions {
+                    opt_level: level,
+                    ..base.clone()
+                },
+            )
+        };
+        let o0 = at(OptLevel::O0);
+        let o1 = at(OptLevel::O1);
+        let o2 = at(OptLevel::O2);
+        assert_eq!(o0, o1, "{name}: -O0 and -O1 disagree:\n{o0}\nvs\n{o1}");
+        assert_eq!(o1, o2, "{name}: -O1 and -O2 disagree:\n{o1}\nvs\n{o2}");
+        assert!(o1.contains(fact), "{name}: expected {fact:?} in\n{o1}");
+    }
 }
 
 #[test]
-fn turning_on_double_precision_really_does_change_the_numbers() {
-    // This is what gives the corpus assertions their teeth. `default_real8` is
-    // the one option in the interface that rewrites what REAL means, and if the
-    // pinned bit patterns did not move when it is switched on, they would not
-    // be measuring precision at all.
+fn each_precision_gives_its_own_answer_and_the_default_is_80_bit() {
+    // Three settings, three different bit patterns, each predicted from the
+    // format's definition. That does two jobs at once: it pins what the
+    // application ships (80-bit), and it shows these assertions are actually
+    // watching the arithmetic -- if all three came out the same, they would be
+    // passing for some reason that has nothing to do with precision.
     //
-    // It also documents the cost of that switch, which is easy to reach for and
-    // not obviously destructive: every REAL in the user's program changes size,
-    // so a file written by one build is not readable by the other.
+    // The last case is the one a user could get wrong by accident: both
+    // options redefine REAL, and an explicit choice of 8 bytes has to win over
+    // an 80-bit default that nobody chose.
     let Some(tc) = toolchain() else { return };
     let tmp = tempfile::tempdir().unwrap();
 
     let shipped = output_with(&tc, tmp.path(), 1, BuildOptions::default());
-    let promoted = output_with(
+    let narrow = output_with(&tc, tmp.path(), 2, single());
+    let both = output_with(
         &tc,
         tmp.path(),
-        2,
+        3,
         BuildOptions {
             default_real8: true,
             ..Default::default()
@@ -139,16 +168,15 @@ fn turning_on_double_precision_really_does_change_the_numbers() {
     );
 
     assert!(
-        shipped.contains("A  1036831949"),
-        "the shipped settings must give single-precision 0.1:\n{shipped}"
-    );
-    assert_ne!(
-        shipped, promoted,
-        "promoting REAL to eight bytes changed nothing, so these assertions \
-         are not actually watching the arithmetic:\n{shipped}"
+        shipped.contains(EXTENDED),
+        "the shipped settings must carry REAL at 80 bits:\n{shipped}"
     );
     assert!(
-        !promoted.contains("A  1036831949"),
-        "with REAL promoted, the single-precision bit pattern must not survive:\n{promoted}"
+        narrow.contains(SINGLE),
+        "turning extended precision off must give 32-bit REAL:\n{narrow}"
+    );
+    assert!(
+        both.contains(DOUBLE),
+        "an explicit 8-byte REAL must win over the 80-bit default:\n{both}"
     );
 }
