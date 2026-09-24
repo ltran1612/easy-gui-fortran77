@@ -117,6 +117,30 @@ unguarded for a release because it was added without one.
 | `examples/` | `examples/DOC-TRUOC.txt` | `tests/examples.rs` builds and runs each, and checks the guide names them |
 | `ef-testkit/corpus/` | each case's `expect.toml` | `tests/corpus.rs` |
 
+## Build defaults, and why each one starts there
+
+Every option, the way it ships, and the reason in a line. The long form —
+what each flag allows, what it costs, when to change it — is
+[docs/OPTIONS.md](docs/OPTIONS.md); the same reasons sit beside the fields in
+`project.rs` and beside the flags in `build/args.rs`.
+
+| Option | Default | Flag | Why this default |
+|---|---|---|---|
+| Dialect | Legacy | `-std=legacy` | Restores the five things F90 deleted (arithmetic `IF`, `PAUSE`, `ASSIGN`, assigned `GOTO`, `REAL` DO variable) and implies `-fallow-argument-mismatch`. Standard rejects working programs |
+| Line length | 72 columns | `-ffixed-line-length-72` | Card-image code carries sequence numbers in columns 73–80; read as code they are syntax errors |
+| DEC/Microsoft extensions | on | `-fdec` | Only permits spellings the DOS-era compilers accepted; changes no arithmetic and rejects nothing |
+| Static local storage | on | `-fno-automatic -finit-local-zero` | DOS compilers used static zeroed storage. Code relying on a local keeping its value, or an accumulator starting at zero, is silently wrong without it |
+| `D` lines as code | off | `-fd-lines-as-code` | Those debugging lines were switched off on purpose |
+| 8-byte `REAL` | off | `-fdefault-real-8 -fdefault-double-8` | Changes storage sizes: unformatted files stop being readable, `EQUIVALENCE` overlays shift, a 4-byte library gets 8-byte values |
+| Old compiler's arithmetic | on | `-mfpmath=387`, forces `-O0` | The setting that agrees with the old compiler on a formula worked out and stored. See the section below for where it still differs |
+| Large local arrays | off | `-fmax-stack-var-size=0` | gfortran already puts large fixed-size locals in static memory; this is the fallback for a stack overflow on entry (`0xC00000FD`) |
+| Bounds check | on | `-fcheck=bounds` | The one deliberate departure from 1985: a plausible wrong number believed is worse than a program that stops |
+| Wait for a key | on | pause shim, `-Wl,--wrap=exit` | A double-clicked program would otherwise flash and vanish with its results unread. Windows only |
+| Strip symbols | off | `-s` at link | A smaller file is worth less than a diagnosable crash |
+| Optimisation | `-O1` | `-O0`/`-O1`/`-O2` | Ignored while the old compiler's arithmetic is on. With plain arithmetic the level changes no digits (asserted in `tests/precision.rs`), so it is only speed: `-O0` 0.17 s, `-O1` 0.02 s, `-O2` 0.01 s on a 400 × 400 matrix product |
+| Preprocess | never | `-x f77` (vs `-x f77-cpp-input`) | gcc's suffix rules run the C preprocessor on uppercase `.FOR` but not on `.for`, so the language would depend on the spelling of the name; under it a `#` in column 1 vanishes as a directive |
+| Extra flags | empty | passed verbatim, last | An escape hatch. Being last, an `-O2` typed here overrides the forced `-O0` |
+
 ## Tests
 
 | Tier | Needs | Where |
@@ -243,6 +267,7 @@ option turned off, is not run through the corpus.
 
 | Question | File |
 |---|---|
+| What does an option do, and why does it start there? | [docs/OPTIONS.md](docs/OPTIONS.md) |
 | What flags does a build use, and why? | `build/args.rs` |
 | Why was my file refused? | `build/sourcefmt.rs`, `build/objfmt.rs` |
 | How is a toolchain found and trusted? | `toolchain/mod.rs`, `toolchain/manifest.rs` |
