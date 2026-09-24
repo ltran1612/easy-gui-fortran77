@@ -1,7 +1,10 @@
 description = """
 The .FOR trap. gcc treats an uppercase .FOR suffix as "fixed form, run the C
-preprocessor". This file has an apostrophe in a comment and a # in column 1, so
-it fails loudly if cpp is ever allowed near it. Staging renames it to .f.
+preprocessor". This file has a # in column 1, which cpp rejects outright with
+"invalid preprocessing directive #A", so the case fails loudly if cpp is ever
+allowed near it. It also has an apostrophe in a comment, the other half of the
+trap as this project has long described it; on the pinned GCC 16.2 cpp passes
+that one, so the # is what does the work. Staging renames the file to .f.
 """
 sources = ["SOLVER.FOR"]
 success = true

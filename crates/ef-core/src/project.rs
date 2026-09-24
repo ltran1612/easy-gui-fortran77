@@ -65,8 +65,9 @@ impl OptLevel {
 }
 
 /// Whether to run the C preprocessor. Almost always `Never`: an uppercase `.FOR`
-/// name would otherwise make gcc preprocess the file, and cpp then chokes on
-/// apostrophes in comments and on `#` in column 1.
+/// name would otherwise make gcc preprocess the file, and cpp then reads a `#`
+/// in column 1 as a directive -- an error unless it happens to name a real one --
+/// and substitutes any identifier that matches a macro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Preprocess {

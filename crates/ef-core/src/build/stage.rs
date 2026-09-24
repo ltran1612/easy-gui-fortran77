@@ -3,11 +3,11 @@
 //! This one step solves three problems at once:
 //!
 //! 1. **The `.FOR` trap.** gcc's suffix matching is case-sensitive: `.for` is
-//!    fixed-form, but `.FOR` runs the C preprocessor, which then chokes on
-//!    apostrophes in comments and on `#` in column 1. DOS-era files are almost
-//!    always uppercase, and Windows is case-insensitive but case-preserving, so the
-//!    driver really does see `.FOR`. (`.f77` is not a recognised suffix at all —
-//!    gfortran would treat it as a linker input.)
+//!    fixed-form, but `.FOR` runs the C preprocessor, which then reads a `#` in
+//!    column 1 as a directive and substitutes identifiers that match macros. DOS-era
+//!    files are almost always uppercase, and Windows is case-insensitive but
+//!    case-preserving, so the driver really does see `.FOR`. (`.f77` is not a
+//!    recognised suffix at all — gfortran would treat it as a linker input.)
 //! 2. **Non-ASCII argv.** A MinGW-built `gfortran.exe` receives argv converted
 //!    through the process ANSI codepage; `Chương trình.for` can arrive mangled at
 //!    `f951`. We control the staged names, so we make them boring.
@@ -337,8 +337,9 @@ mod tests {
         let his_dir = td.path().join("Documents");
         std::fs::create_dir_all(&his_dir).unwrap();
         let his_file = his_dir.join("SOLVER.FOR");
-        // An apostrophe in a comment and a `#` in column 1: both would break if the
-        // C preprocessor ever touched this file.
+        // A `#` in column 1, which the C preprocessor would read as a directive,
+        // and an apostrophe in a comment, which older cpp took for an unterminated
+        // string. Neither may be altered on the way into the work tree.
         let content = b"C     Don't touch this\n#define NOPE\n      PROGRAM P\n      END\n";
         std::fs::write(&his_file, content).unwrap();
         let before = std::fs::metadata(&his_file).unwrap().modified().unwrap();

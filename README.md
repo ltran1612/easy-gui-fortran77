@@ -120,9 +120,11 @@ built, and refuses to write over anything that looks like a source file.
 ## Six things that bite, and what is done about them
 
 **Uppercase `.FOR` gets silently preprocessed.** gcc's suffix matching is
-case-sensitive: `.for` is fixed form, but `.FOR` runs the C preprocessor, which then
-chokes on apostrophes in comments and on `#` in column 1. DOS-era files are almost
-always uppercase. (`.f77` is not a recognised suffix at all.) Every source is copied
+case-sensitive: `.for` is fixed form, but `.FOR` runs the C preprocessor, which
+then takes a `#` in column 1 as a directive — `#     A hash...` is
+`Error: invalid preprocessing directive #A` — and substitutes any identifier
+that matches a macro. DOS-era files are almost always uppercase. (`.f77` is not a
+recognised suffix at all.) Every source is copied
 into the work tree under a normalised lowercase ASCII name — which also delivers the
 read-only guarantee and keeps non-ASCII paths out of the compiler's argv.
 
