@@ -91,7 +91,7 @@ const SRC: &[u8] = b"      PROGRAM P\n      END\n";
 // ---------------------------------------------------------------- file safety
 
 #[test]
-fn a_build_never_modifies_his_source_files() {
+fn a_build_never_modifies_the_users_source_files() {
     // The top-priority requirement, expressed executably.
     let f = Fixture::new(&[
         (
@@ -161,7 +161,7 @@ fn errors_are_collected_from_every_file_not_just_the_first() {
 }
 
 #[test]
-fn diagnostics_name_his_file_not_our_staged_copy() {
+fn diagnostics_name_the_users_file_not_our_staged_copy() {
     let f = Fixture::new(&[("SOLVER.FOR", SRC)]);
     f.set_mode("error");
     let outcome = f.build(&f.program(&["SOLVER.FOR"]));
@@ -366,17 +366,17 @@ fn the_built_program_can_be_saved_where_he_chooses_and_still_runs() {
 }
 
 #[test]
-fn saving_never_writes_over_one_of_his_source_files() {
+fn saving_never_writes_over_one_of_the_users_source_files() {
     let f = Fixture::new(&[("PROG.FOR", SRC)]);
     let exe = build_runnable(&f);
-    let his_source = f.user_files.join("PROG.FOR");
-    let before = std::fs::read(&his_source).unwrap();
+    let user_source = f.user_files.join("PROG.FOR");
+    let before = std::fs::read(&user_source).unwrap();
 
     assert!(
-        f.guard.export_built_program(&exe, &his_source).is_err(),
+        f.guard.export_built_program(&exe, &user_source).is_err(),
         "a save dialog should never produce this, but it must be refused if it does"
     );
-    assert_eq!(std::fs::read(&his_source).unwrap(), before);
+    assert_eq!(std::fs::read(&user_source).unwrap(), before);
 }
 
 #[test]
@@ -384,9 +384,9 @@ fn saving_refuses_anything_we_did_not_build() {
     // Export writes outside our own tree, so its source must be something we
     // produced -- never one of the user's files copied somewhere else.
     let f = Fixture::new(&[("PROG.FOR", SRC)]);
-    let his_source = f.user_files.join("PROG.FOR");
+    let user_source = f.user_files.join("PROG.FOR");
     let dest = f.user_files.parent().unwrap().join("copy.bin");
-    assert!(f.guard.export_built_program(&his_source, &dest).is_err());
+    assert!(f.guard.export_built_program(&user_source, &dest).is_err());
     assert!(!dest.exists());
 }
 

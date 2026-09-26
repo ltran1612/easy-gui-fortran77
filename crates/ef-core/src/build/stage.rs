@@ -334,22 +334,22 @@ mod tests {
     #[test]
     fn staging_copies_bytes_verbatim_and_leaves_the_original_untouched() {
         let td = tempfile::tempdir().unwrap();
-        let his_dir = td.path().join("Documents");
-        std::fs::create_dir_all(&his_dir).unwrap();
-        let his_file = his_dir.join("SOLVER.FOR");
+        let user_dir = td.path().join("Documents");
+        std::fs::create_dir_all(&user_dir).unwrap();
+        let user_file = user_dir.join("SOLVER.FOR");
         // A `#` in column 1, which the C preprocessor would read as a directive,
         // and an apostrophe in a comment, which older cpp took for an unterminated
         // string. Neither may be altered on the way into the work tree.
         let content = b"C     Don't touch this\n#define NOPE\n      PROGRAM P\n      END\n";
-        std::fs::write(&his_file, content).unwrap();
-        let before = std::fs::metadata(&his_file).unwrap().modified().unwrap();
+        std::fs::write(&user_file, content).unwrap();
+        let before = std::fs::metadata(&user_file).unwrap().modified().unwrap();
 
         let paths = AppPaths::under(td.path().join("app"));
         let guard = FsGuard::new(paths.write_roots().to_vec()).unwrap();
         let layout = WorkLayout::new(paths.build_dir(1));
 
         let mut program = Program::new("t");
-        program.sources = vec![SourceRef::new(&his_file)];
+        program.sources = vec![SourceRef::new(&user_file)];
 
         let staging = stage(&guard, &layout, &program, host_expect()).unwrap();
         assert_eq!(staging.sources.len(), 1);
@@ -357,12 +357,12 @@ mod tests {
         assert_eq!(s.staged_name, "solver.f");
         assert_eq!(std::fs::read(&s.staged).unwrap(), content);
         assert_eq!(s.display_name, "SOLVER.FOR");
-        assert_eq!(staging.include_dirs, vec![his_dir]);
+        assert_eq!(staging.include_dirs, vec![user_dir]);
 
         // The user's file is byte-identical and was not even touched.
-        assert_eq!(std::fs::read(&his_file).unwrap(), content);
+        assert_eq!(std::fs::read(&user_file).unwrap(), content);
         assert_eq!(
-            std::fs::metadata(&his_file).unwrap().modified().unwrap(),
+            std::fs::metadata(&user_file).unwrap().modified().unwrap(),
             before
         );
     }
@@ -479,7 +479,7 @@ mod library_tests {
     }
 
     #[test]
-    fn the_staged_copy_is_byte_for_byte_and_his_file_is_untouched() {
+    fn the_staged_copy_is_byte_for_byte_and_the_original_is_untouched() {
         let f = fx();
         std::fs::write(f.user_dir.join("MAIN.FOR"), b"      END\n").unwrap();
         let original = f.user_dir.join("MATH.LIB");

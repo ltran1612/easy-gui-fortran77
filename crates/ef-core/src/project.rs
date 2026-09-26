@@ -705,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn a_suggested_file_name_keeps_his_words_but_drops_illegal_characters() {
+    fn a_suggested_file_name_keeps_the_programs_words_but_drops_illegal_characters() {
         let n = suggested_program_file_name("Tính dầm bê tông");
         assert!(n.starts_with("Tính dầm bê tông"), "got {n}");
         assert!(n.ends_with(std::env::consts::EXE_SUFFIX));

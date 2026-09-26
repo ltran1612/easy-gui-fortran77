@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn a_compiler_runtime_is_told_apart_from_his_own_code() {
+    fn a_compiler_runtime_is_told_apart_from_the_users_own_code() {
         // The user's code: a handful of named routines.
         let own_code = read_library(&library(
             &[("SOLVER.FOR", &["INVERT", "MATMUL", "SOLVE"])],

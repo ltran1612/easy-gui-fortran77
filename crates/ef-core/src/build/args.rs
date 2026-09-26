@@ -511,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn libraries_are_named_relatively_so_his_path_stays_out_of_argv() {
+    fn libraries_are_named_relatively_so_the_users_path_stays_out_of_argv() {
         let layout = WorkLayout::new(PathBuf::from("/work/build-1"));
         let libs = vec![staged_lib(&layout, "mathlib.a")];
         let a = strings(&link_args(

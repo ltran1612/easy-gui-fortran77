@@ -292,7 +292,7 @@ collect2: error: ld returned 1 exit status
     }
 
     #[test]
-    fn staged_names_are_rewritten_back_to_his_names() {
+    fn staged_names_are_rewritten_back_to_the_original_names() {
         use crate::build::stage::StagedSource;
         use std::path::PathBuf;
         let mut d = parse("./src/solver.f:1:1:\n\nError: boom\n");

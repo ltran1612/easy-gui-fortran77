@@ -151,9 +151,9 @@ fn a_bundled_toolchain_compiles_and_runs_a_real_program() {
     );
 
     // And it must actually build something.
-    let his_dir = td.path().join("Documents");
-    std::fs::create_dir_all(&his_dir).unwrap();
-    let src = his_dir.join("HELLO.FOR");
+    let user_dir = td.path().join("Documents");
+    std::fs::create_dir_all(&user_dir).unwrap();
+    let src = user_dir.join("HELLO.FOR");
     std::fs::write(
         &src,
         b"      PROGRAM HELLO\n      WRITE (*,*) 'bundled ok'\n      END\n",
@@ -203,15 +203,15 @@ fn a_bundles_flags_actually_reach_the_compiler_on_both_compile_and_link() {
     );
 
     let tc = Toolchain::from_bundle(&bundle_root).unwrap();
-    let his_dir = td.path().join("Documents");
-    std::fs::create_dir_all(&his_dir).unwrap();
-    std::fs::write(his_dir.join("A.FOR"), b"      END\n").unwrap();
+    let user_dir = td.path().join("Documents");
+    std::fs::create_dir_all(&user_dir).unwrap();
+    std::fs::write(user_dir.join("A.FOR"), b"      END\n").unwrap();
 
     let paths = AppPaths::under(td.path().join("app"));
     let guard = FsGuard::new(paths.write_roots().to_vec()).unwrap();
     let layout = WorkLayout::new(paths.build_dir(1));
     let mut program = Program::new("flags");
-    program.sources.push(SourceRef::new(his_dir.join("A.FOR")));
+    program.sources.push(SourceRef::new(user_dir.join("A.FOR")));
 
     let outcome = build::build(
         &guard,

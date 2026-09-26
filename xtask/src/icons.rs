@@ -8,7 +8,7 @@
 //!
 //! - `packaging/windows/icon.ico` — embedded into `easy-fortran-77.exe` as a
 //!   resource, and used by NSIS for the installer and uninstaller. The installer
-//!   icon is the one he actually sees first, on the file he downloads.
+//!   icon is the one the user sees first, on the file they download.
 //! - `crates/ef-gui/assets/icon-128.png` — the window icon, set at runtime, which
 //!   is how Linux gets one at all.
 

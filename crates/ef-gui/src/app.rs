@@ -1542,8 +1542,8 @@ impl App {
             });
 
             // The download is a separate, deliberate press, and it opens the
-            // release page rather than replacing anything behind his back: the
-            // installer he runs is the same one he installed with.
+            // release page rather than replacing anything behind their back:
+            // the installer they run is the same one they installed with.
             if let UpdateState::Done(Ok(update::Status::Available { .. })) = &self.update {
                 ui.add_space(6.0);
                 if ui.button(tr!(lang, "update.download")).clicked() {
